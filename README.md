@@ -4,7 +4,7 @@
 
 一个**独立的、可被多个项目复用**的小服务。第一个消费方是 [kun-galgame-forum](https://github.com/KunMoe/kun-galgame-forum)(论坛的「资源报告失效」功能),未来可被 kun-galgame-patch(moyu / 补丁站)等复用。
 
-状态:🌱 **起步期(scaffolding)**。本仓目前只有设计文档与骨架,实现按 [§ 路线图](#路线图) 分阶段进行。
+状态:🚧 **Phase 0 + Phase 1(夸克)已落地**。骨架(三态核心、HTTP API、s2s 鉴权、缓存、按 provider 限流、配置)+ 夸克 checker 已端到端跑通并对真实 API 验证;UC 引擎就绪但其 API 待实测确认,默认关闭。详见 [§ 路线图](#路线图)。
 
 > 🤖 **接手本项目的 AI 代理**:先读 [`CLAUDE.md`](CLAUDE.md)(它会被 Claude Code 自动加载),再读 `README.md` → `docs/REQUIREMENTS.md` → `docs/PROVIDERS.md`。
 
@@ -88,8 +88,8 @@
 
 ## 路线图
 
-- **Phase 0 — 骨架**:核心接口、HTTP API、s2s 鉴权、缓存、按 provider 限流、配置。
-- **Phase 1 — 夸克 + UC**(~36%,API 已实测验证):跑通端到端 + 接成论坛报告闸门。
+- **Phase 0 — 骨架** ✅:核心接口、HTTP API、s2s 鉴权、缓存、按 provider 限流、配置。
+- **Phase 1 — 夸克 + UC**(~36%):夸克 ✅(已对真实 API 验证);UC 引擎就绪、API 待实测确认(默认关闭)。下一步:接成论坛报告闸门、补 UC 端点参数。
 - **Phase 2 — 百度**(35.6%,最难,反爬最凶):框架跑顺后再啃。
 - **Phase 3 — 和彩云 / 迅雷 / 123 盘**。
 - **以后**:后台低频复检、代理/IP 池、更多 provider、尾巴(磁链/友站/图床)的兜底策略。
@@ -98,12 +98,28 @@
 
 ---
 
-## 开发(待补)
+## 开发
+
+Go service,**零外部依赖、单二进制**(stdlib only)。
 
 ```bash
-# Go service,目标:最小依赖、单二进制部署
-go run ./cmd/server      # 占位,Phase 0 落地
+go test ./...                              # 全部测试(含「永不误判 dead」的铁律守卫测试)
+go build -o bin/llc ./cmd/server           # 构建单二进制
+
+# 运行(最少只需一把 API key;配置见 .env.example)
+LLC_API_KEYS=$(openssl rand -hex 16) go run ./cmd/server
 ```
+
+调用(s2s,Bearer 鉴权):
+
+```bash
+curl -s -X POST localhost:8080/v1/check \
+  -H "Authorization: Bearer $LLC_API_KEYS" \
+  -d '{"url":"https://pan.quark.cn/s/<pwd_id>","passcode":"<可选提取码>"}'
+# => {"provider":"quark","status":"alive|dead|unknown","reason":"...","providerCode":"...","cached":false}
+```
+
+完整配置项见 [`.env.example`](.env.example)。代码结构:`cmd/server` 入口;`internal/checker` 三态核心与 provider 注册表;`internal/provider/*` 各网盘 checker;`internal/{cache,ratelimit,config,httpapi,service}` 地基。
 
 ## 名字
 

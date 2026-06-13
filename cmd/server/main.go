@@ -15,6 +15,7 @@ import (
 	"github.com/KunMoe/kungal-link-live-checker/internal/checker"
 	"github.com/KunMoe/kungal-link-live-checker/internal/config"
 	"github.com/KunMoe/kungal-link-live-checker/internal/httpapi"
+	"github.com/KunMoe/kungal-link-live-checker/internal/provider/baidu"
 	"github.com/KunMoe/kungal-link-live-checker/internal/provider/quark"
 	"github.com/KunMoe/kungal-link-live-checker/internal/provider/uc"
 	"github.com/KunMoe/kungal-link-live-checker/internal/ratelimit"
@@ -42,6 +43,9 @@ func main() {
 		checkers = append(checkers, uc.New(uc.Options{
 			TokenURL: cfg.UCTokenURL, Client: httpClient, Logger: log, BlockedAsDead: cfg.QuarkBlockedAsDead,
 		}))
+	}
+	if cfg.BaiduEnabled {
+		checkers = append(checkers, baidu.New(baidu.Options{Client: httpClient, Logger: log}))
 	}
 
 	registry := checker.NewRegistry(checkers...)

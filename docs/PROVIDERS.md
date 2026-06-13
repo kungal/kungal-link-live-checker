@@ -67,27 +67,35 @@
 
 ---
 
-## 百度网盘 baidu(35.6%)✅ 可行但最难
+## 百度网盘 baidu(35.6%)✅ 已验证(走 shorturlinfo)
 
-- 分享 URL:`https://pan.baidu.com/s/<surl>`(常带 `?pwd=<提取码>`)
-- **反爬最凶**:裸 `curl` 实测直接 `302`(body 仅 135 字节),重定向到验证/登录。需要正确的 API + headers(UA、Referer、可能要 `BAIDUID` 之类 cookie)。
-- 接口与字段(社区文档一致度高,字段名 `errno`;**仍需带 cookie 实测复验**后再写死):
-  - 提取码校验:`POST https://pan.baidu.com/share/verify?surl=<surl>&bdstoken=<t>&t=<ms>&channel=chunlei&web=1&clienttype=0`,body `pwd=<提取码>`;成功回 `randsk`(写入 `BDCLND` cookie)。
-  - 分享页/有效性:`GET https://pan.baidu.com/s/<surl>`,从返回里抓 `shareid`/`share_uk`/`fs_id`;抓不到即失效。`<title>` 也带状态:**`百度网盘-链接不存在`**。
-  - **需要登录态**:`Cookie` 至少含 `BAIDUID`(转存还需 `BDUSS`)、`bdstoken`(从 `/api/gettemplatevariable` 取)、真实浏览器 UA、`Referer: https://pan.baidu.com`。裸 curl 会被 302 到登录页。
+- 分享 URL:`https://pan.baidu.com/s/1<surl>`(常带 `?pwd=<提取码>`)
+- **反爬**:裸 `curl` 无 cookie 直接 `302` 到反爬页。但**只要先拿一个 `BAIDUID` cookie**(GET 一次 `https://pan.baidu.com/` 即由服务端 `Set-Cookie`),后续 `shorturlinfo` **无需登录**即可读 JSON。这是本服务采用的方案。
+- 状态 API(**实测可用**,2026-06-13):
+  ```
+  GET https://pan.baidu.com/api/shorturlinfo?app_id=250528&web=1&channel=chunlei&clienttype=0&shorturl=1<surl>
+  Cookie: BAIDUID=...        ← 先 GET 首页拿到
+  User-Agent: <浏览器 UA>
+  Referer: https://pan.baidu.com/s/1<surl>
+  ```
+- **`errno` 映射**(本服务用的就是这张表):
 
-  | `errno` | 含义 | 判定 |
+  | `errno` | 含义(实测) | 判定 |
   |---|---|---|
-  | `0` | 成功 / 提取码正确 | `alive`(配合抓到 shareid) |
-  | `-7` | 分享已删除或已取消 | **`dead` / `share_not_found`** |
-  | `-8` | 分享已过期 | **`dead` / `share_expired`** |
-  | `-9` | **提取码错误** | `unknown` / `passcode_required`(**绝非 dead**,经典误杀点) |
-  | `-12` / `-62` | 提取码错误次数过多 / 需验证码 | `unknown` |
-  | `-19` / `-20` | 验证码 | `unknown` / `captcha_required` |
-  | `-16` | 文件已被限制分享 | `dead`(倾向,待确认不是临时态) |
-  | 其它 | —— | `unknown` |
+  | `0` | 公开分享存在可访问 | `alive` / `share_ok` |
+  | `-9` | 分享存在、**需提取码**(分享页标题"请输入提取码") | `alive` / `share_ok`(链接存在即非 dead) |
+  | `-21` | **分享不存在**(分享页标题"页面不存在",已删/已取消/已失效) | **`dead` / `share_not_found`** |
+  | `140` | 链接格式错误("啊哦,链接出错了",`shareid:0`) | `unknown`(可能是畸形输入) |
+  | 其它 | —— | `unknown` / `unparseable_response`(打 WARN) |
 
-- 来源:`void285` errno gist、`PeterDing/iScript` wiki、`hxz393/BaiduPanFilesTransfers`(`verify_links`/`verify_pass_code`,直接读到上述流程与 title 哨兵)。⚠️ 仍按铁律:Phase 2 带 cookie 实测复验 `-7/-8/-16` 后再开 `dead`,确认前一律 `unknown`。`-9` 必须是 `unknown`。
+- **实测来源**:对论坛库 48 条最早百度分享逐条打 `shorturlinfo`(2026-06-13,带 BAIDUID):`-9`×33(alive,均"请输入提取码")、`-21`×15(全部"页面不存在"=dead)。**逐条核对了 -21 的分享页标题,15/15 都是"页面不存在",无登录墙误判**,故 `-21 → dead` 安全。
+- ⚠️ 关键陷阱:**`shareid`/`uk` 是从 shorturl 解码出来的,失效分享照样返回**,不能当存在信号——只认 `errno`。另:`shorturlinfo` 的 `-9` 是"需提取码(存在)",与下面 `/share/verify` 的 `-9`="提取码错误" **含义不同**,别混。
+
+<details><summary>备用:带提取码校验 / 转存用的 <code>/share/verify</code>(Phase 1 闸门暂不需要,留作后续)</summary>
+
+`POST https://pan.baidu.com/share/verify?surl=<surl>&bdstoken=<t>&channel=chunlei&web=1&clienttype=0`,body `pwd=<提取码>`;成功回 `randsk`(写 `BDCLND` cookie)。此端点 `errno`:`-9`=提取码错误(**unknown,非 dead**)、`-12/-62`=错误次数过多/验证码(unknown)、`-7`=已删除/取消、`-8`=已过期。需 `bdstoken`(从 `/api/gettemplatevariable` 取)。来源:`void285` gist、`PeterDing/iScript` wiki、`hxz393/BaiduPanFilesTransfers`。**这些码未在本服务实测,用前需复验。**
+
+</details>
 
 ---
 

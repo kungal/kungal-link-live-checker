@@ -4,7 +4,7 @@
 
 一个**独立的、可被多个项目复用**的小服务。第一个消费方是 [kun-galgame-forum](https://github.com/KunMoe/kun-galgame-forum)(论坛的「资源报告失效」功能),未来可被 kun-galgame-patch(moyu / 补丁站)等复用。
 
-状态:🚧 **Phase 0 + Phase 1(夸克 + UC)已落地**。骨架(三态核心、HTTP API、s2s 鉴权、缓存、按 provider 限流、配置)+ 夸克/UC checker 已端到端跑通,并对**真实生产链接**(含已失效分享)逐条验证 `alive`/`dead`/`unknown` 判定。详见 [§ 路线图](#路线图)。
+状态:🚧 **Phase 0 + 1 + 2 已落地(夸克 / UC / 百度,≈ 71% 链接)**。骨架(三态核心、HTTP API、s2s 鉴权、缓存、按 provider 限流、配置)+ 三家 checker 已端到端跑通,并对**真实生产链接**(含已失效分享)逐条验证 `alive`/`dead`/`unknown` 判定。详见 [§ 路线图](#路线图)。
 
 > 🤖 **接手本项目的 AI 代理**:先读 [`CLAUDE.md`](CLAUDE.md)(它会被 Claude Code 自动加载),再读 `README.md` → `docs/REQUIREMENTS.md` → `docs/PROVIDERS.md`。
 
@@ -89,9 +89,9 @@
 ## 路线图
 
 - **Phase 0 — 骨架** ✅:核心接口、HTTP API、s2s 鉴权、缓存、按 provider 限流、配置。
-- **Phase 1 — 夸克 + UC**(~36%)✅:两家均已对真实 API 验证(夸克 `0/41004/41006/41011/41012/41010/41031`、UC 同源 `pc-api.uc.cn`)。下一步:接成论坛报告闸门(待论坛就绪)。
-- **Phase 2 — 百度**(35.6%,最难,反爬最凶):框架跑顺后再啃。
-- **Phase 3 — 和彩云 / 迅雷 / 123 盘**。
+- **Phase 1 — 夸克 + UC**(~36%)✅:两家均已对真实 API 验证(夸克 `0/41004/41006/41011/41012/41010/41031`、UC 同源 `pc-api.uc.cn`)。
+- **Phase 2 — 百度**(35.6%)✅:走 `shorturlinfo`(只需 `BAIDUID` cookie,无需登录),实测验证 `errno -21 → dead`、`0/-9 → alive`。三家合计 ≈ **71%** 链接可客观校验。下一步:接成论坛报告闸门(待论坛就绪)。
+- **Phase 3 — 和彩云 / 迅雷 / 123 盘**(端点已检索,见 docs/PROVIDERS.md)。
 - **以后**:后台低频复检、代理/IP 池、更多 provider、尾巴(磁链/友站/图床)的兜底策略。
 
 每一档都可独立交付、随时停在某档。

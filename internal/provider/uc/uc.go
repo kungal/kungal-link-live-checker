@@ -1,8 +1,7 @@
 // Package uc is the UC netdisk (drive.uc.cn) checker. UC is homologous to Quark
-// but its exact API host/params are NOT yet verified (docs/PROVIDERS.md): until
-// confirmed it returns Unknown for anything it cannot positively read — never
-// Dead. Enable via LLC_UC_ENABLED once the real endpoint is confirmed and set
-// LLC_UC_TOKEN_URL accordingly.
+// and shares the same clouddrive token API and code mapping; only the host
+// (pc-api.uc.cn) and query params (pr=UCBrowser) differ. Verified against the
+// live API on 2026-06-13 (docs/PROVIDERS.md). UC also requires an Origin header.
 package uc
 
 import (
@@ -27,6 +26,7 @@ func New(opts Options) *quarkfamily.Checker {
 		Hosts:         []string{"drive.uc.cn"},
 		TokenURL:      opts.TokenURL,
 		Referer:       "https://drive.uc.cn/",
+		Origin:        "https://drive.uc.cn",
 		BlockedAsDead: opts.BlockedAsDead,
 		Client:        opts.Client,
 		Logger:        opts.Logger,

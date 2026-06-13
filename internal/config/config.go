@@ -29,7 +29,7 @@ type Config struct {
 	// REQUIREMENTS §3.3 / §10 open question #1.
 	QuarkBlockedAsDead bool
 
-	// UC is homologous to Quark but its API is not yet verified; off by default.
+	// UC is homologous to Quark and verified (docs/PROVIDERS.md); on by default.
 	UCEnabled  bool
 	UCTokenURL string
 }
@@ -47,7 +47,7 @@ func Load() Config {
 		RateRPS:            envFloat("LLC_RATE_RPS", 5),
 		RateBurst:          envInt("LLC_RATE_BURST", 5),
 		QuarkBlockedAsDead: envBool("LLC_QUARK_BLOCKED_AS_DEAD", true),
-		UCEnabled:          envBool("LLC_UC_ENABLED", false),
+		UCEnabled:          envBool("LLC_UC_ENABLED", true),
 		UCTokenURL:         env("LLC_UC_TOKEN_URL", "https://pc-api.uc.cn/1/clouddrive/share/sharepage/token?pr=UCBrowser&fr=pc"),
 	}
 }

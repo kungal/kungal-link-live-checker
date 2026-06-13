@@ -30,8 +30,9 @@ type Config struct {
 	Hosts         []string // hostnames this checker matches (exact, lowercase)
 	TokenURL      string   // full sharepage/token endpoint incl. pr/fr query
 	Referer       string   // Referer header the API expects
+	Origin        string   // optional Origin header (UC requires it)
 	UserAgent     string   // optional; a browser-like default is used if empty
-	BlockedAsDead bool     // map the "blocked" code (41031) to dead vs unknown
+	BlockedAsDead bool     // map "blocked/violation" codes to dead vs unknown
 	Client        *http.Client
 	Logger        *slog.Logger
 }
@@ -82,11 +83,25 @@ type tokenResp struct {
 	} `json:"data"`
 }
 
-// suspectedDeadCodes are codes the community associates with removed shares but
-// which we have NOT verified against a known-dead share. Per the iron law they
-// stay Unknown until confirmed and promoted in PROVIDERS.md; we only log them
-// loudly so operators can capture the real "not found" code (PROVIDERS.md).
-var suspectedDeadCodes = map[int]bool{41006: true, 41027: true}
+// goneDeadCodes are VERIFIED "the share no longer exists" signals — probed
+// against real (now-dead) shares from the kungal forum DB on 2026-06-13; see
+// docs/PROVIDERS.md for the evidence. Mapping a code here is the only way a
+// verdict becomes Dead for a definitively-gone share.
+var goneDeadCodes = map[int]string{
+	41004: checker.ReasonShareNotFound, // 文件不存在
+	41006: checker.ReasonShareNotFound, // 分享不存在
+	41011: checker.ReasonShareExpired,  // 分享地址已失效
+	41012: checker.ReasonShareNotFound, // 好友已取消了分享
+}
+
+// blockedCodes are violation/ban takedowns: the share is inaccessible to the
+// user, but this is a moderation action rather than a plain deletion. Dead by
+// default, downgradable to Unknown via BlockedAsDead=false (REQUIREMENTS §3.3
+// / §10 open question #1).
+var blockedCodes = map[int]bool{
+	41010: true, // 文件涉及违规内容
+	41031: true, // 分享者用户封禁链接查看受限
+}
 
 // Check probes the share. passcode may be empty; if so we fall back to the
 // URL's ?pwd= query.
@@ -108,6 +123,9 @@ func (c *Checker) Check(ctx context.Context, u *url.URL, passcode string) checke
 	req.Header.Set("User-Agent", c.cfg.UserAgent)
 	if c.cfg.Referer != "" {
 		req.Header.Set("Referer", c.cfg.Referer)
+	}
+	if c.cfg.Origin != "" {
+		req.Header.Set("Origin", c.cfg.Origin)
 	}
 
 	resp, err := c.cfg.Client.Do(req)
@@ -146,20 +164,23 @@ func (c *Checker) mapCode(tr tokenResp) checker.Verdict {
 		}
 		return checker.Alive(checker.ReasonShareOK, code)
 	case 41008:
+		// Missing or wrong passcode — never dead; caller should retry with one.
 		return checker.Unknown(checker.ReasonPasscodeRequired, code)
-	case 41031:
+	}
+
+	if reason, ok := goneDeadCodes[tr.Code]; ok {
+		return checker.Dead(reason, code)
+	}
+	if blockedCodes[tr.Code] {
 		if c.cfg.BlockedAsDead {
 			return checker.Dead(checker.ReasonShareBlocked, code)
 		}
 		return checker.Unknown(checker.ReasonShareBlocked, code)
-	default:
-		if suspectedDeadCodes[tr.Code] {
-			c.cfg.Logger.Warn("unconfirmed suspected-dead code; treating as unknown (confirm in PROVIDERS.md)",
-				"provider", c.cfg.Name, "code", tr.Code, "message", tr.Message)
-		} else {
-			c.cfg.Logger.Warn("unrecognized provider code; treating as unknown (possible API drift)",
-				"provider", c.cfg.Name, "code", tr.Code, "message", tr.Message)
-		}
-		return checker.Unknown(checker.ReasonUnparseable, code)
 	}
+
+	// Unrecognized code: possible API drift — stay Unknown, never Dead, and log
+	// loudly so a spike surfaces the change.
+	c.cfg.Logger.Warn("unrecognized provider code; treating as unknown (possible API drift)",
+		"provider", c.cfg.Name, "code", tr.Code, "message", tr.Message)
+	return checker.Unknown(checker.ReasonUnparseable, code)
 }

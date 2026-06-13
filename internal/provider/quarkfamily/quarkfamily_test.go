@@ -84,15 +84,46 @@ func TestCheckCodeMapping(t *testing.T) {
 			wantStatus:    checker.StatusUnknown, wantReason: checker.ReasonShareBlocked, wantCode: "41031",
 		},
 		{
-			// IRON LAW: a community-rumored but unverified "not found" code must
-			// NOT be Dead until confirmed against a known-dead share.
-			name:       "suspected-dead 41006 stays unknown, never dead",
-			httpStatus: 200,
-			body:       `{"status":200,"code":41006,"message":"分享不存在"}`,
-			wantStatus: checker.StatusUnknown, wantReason: checker.ReasonUnparseable, wantCode: "41006",
+			name:       "41004 文件不存在 -> dead/share_not_found",
+			httpStatus: 404,
+			body:       `{"status":404,"code":41004,"message":"文件不存在"}`,
+			wantStatus: checker.StatusDead, wantReason: checker.ReasonShareNotFound, wantCode: "41004",
 		},
 		{
-			name:       "unrecognized code -> unknown",
+			name:       "41006 分享不存在 -> dead/share_not_found",
+			httpStatus: 404,
+			body:       `{"status":404,"code":41006,"message":"分享不存在"}`,
+			wantStatus: checker.StatusDead, wantReason: checker.ReasonShareNotFound, wantCode: "41006",
+		},
+		{
+			name:       "41011 分享地址已失效 -> dead/share_expired",
+			httpStatus: 404,
+			body:       `{"status":404,"code":41011,"message":"分享地址已失效"}`,
+			wantStatus: checker.StatusDead, wantReason: checker.ReasonShareExpired, wantCode: "41011",
+		},
+		{
+			name:       "41012 好友已取消了分享 -> dead/share_not_found",
+			httpStatus: 404,
+			body:       `{"status":404,"code":41012,"message":"好友已取消了分享"}`,
+			wantStatus: checker.StatusDead, wantReason: checker.ReasonShareNotFound, wantCode: "41012",
+		},
+		{
+			name:          "41010 violation, BlockedAsDead=true -> dead/share_blocked",
+			blockedAsDead: true,
+			httpStatus:    404,
+			body:          `{"status":404,"code":41010,"message":"文件涉及违规内容"}`,
+			wantStatus:    checker.StatusDead, wantReason: checker.ReasonShareBlocked, wantCode: "41010",
+		},
+		{
+			name:          "41010 violation, BlockedAsDead=false -> unknown/share_blocked",
+			blockedAsDead: false,
+			httpStatus:    404,
+			body:          `{"status":404,"code":41010,"message":"文件涉及违规内容"}`,
+			wantStatus:    checker.StatusUnknown, wantReason: checker.ReasonShareBlocked, wantCode: "41010",
+		},
+		{
+			// API drift guard: a never-before-seen code must stay unknown.
+			name:       "unrecognized code -> unknown, never dead",
 			httpStatus: 200,
 			body:       `{"status":200,"code":99999,"message":"???"}`,
 			wantStatus: checker.StatusUnknown, wantReason: checker.ReasonUnparseable, wantCode: "99999",
@@ -122,11 +153,12 @@ func TestCheckCodeMapping(t *testing.T) {
 	}
 }
 
-// TestNeverDeadOnAnyUnknownCode is a guard: across a wide sweep of codes, the
-// only one allowed to produce Dead is the verified blocked code (41031).
+// TestNeverDeadOnAnyUnknownCode is a guard: across a wide sweep of codes, only
+// the verified gone/blocked codes may produce Dead. Anything else (including
+// codes the docs once merely *suspected*, like 41027) must stay non-dead.
 func TestNeverDeadOnAnyUnknownCode(t *testing.T) {
-	deadAllowed := map[int]bool{41031: true}
-	for _, code := range []int{-1, 1, 105, 116, 41006, 41027, 41008, 50000, 99999} {
+	deadAllowed := map[int]bool{41004: true, 41006: true, 41011: true, 41012: true, 41010: true, 41031: true}
+	for _, code := range []int{-1, 1, 105, 116, 41027, 41008, 41099, 50000, 99999} {
 		body := `{"code":` + strconv.Itoa(code) + `,"message":"x"}`
 		c := newChecker(t, true, 200, body)
 		got := c.Check(context.Background(), mustURL(t, "https://pan.quark.cn/s/abc123"), "")

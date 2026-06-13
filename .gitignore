@@ -1,0 +1,29 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+*.out
+kungal-link-live-checker
+
+# Go
+/vendor/
+*.test
+*.prof
+coverage.out
+
+# Env / secrets (s2s API keys, proxy creds — never commit)
+.env
+.env.*
+!.env.example
+*.local.yaml
+config.local.*
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs / runtime
+*.log
+/tmp/

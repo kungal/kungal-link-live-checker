@@ -137,13 +137,24 @@ func (s *Service) ttlFor(st checker.Status) time.Duration {
 // cacheKey is the normalized URL plus whether a passcode was supplied
 // (REQUIREMENTS §5). Unknown verdicts are short-/un-cached, so a wrong-passcode
 // miss never poisons a later correct-passcode lookup.
+//
+// The share id lives in different places per provider: the path
+// (quark/baidu/123pan), the query (caiyun /m/i?<id>), or the fragment
+// (caiyun front/#/detail?linkID=<id>). All three are folded in so distinct
+// shares never collide on one key. The pwd param is dropped — passcode presence
+// is tracked separately by the pc flag.
 func cacheKey(u *url.URL, passcode string) string {
 	host := strings.ToLower(u.Hostname())
 	path := strings.TrimRight(u.Path, "/")
+
+	q := u.Query()
+	q.Del("pwd")
+	ident := q.Encode()
+
 	hasPC := passcode != "" || u.Query().Get("pwd") != ""
 	pc := "0"
 	if hasPC {
 		pc = "1"
 	}
-	return host + path + "|pc=" + pc
+	return host + path + "?" + ident + "#" + u.Fragment + "|pc=" + pc
 }

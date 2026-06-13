@@ -16,6 +16,8 @@ import (
 	"github.com/KunMoe/kungal-link-live-checker/internal/config"
 	"github.com/KunMoe/kungal-link-live-checker/internal/httpapi"
 	"github.com/KunMoe/kungal-link-live-checker/internal/provider/baidu"
+	"github.com/KunMoe/kungal-link-live-checker/internal/provider/caiyun"
+	"github.com/KunMoe/kungal-link-live-checker/internal/provider/pan123"
 	"github.com/KunMoe/kungal-link-live-checker/internal/provider/quark"
 	"github.com/KunMoe/kungal-link-live-checker/internal/provider/uc"
 	"github.com/KunMoe/kungal-link-live-checker/internal/ratelimit"
@@ -46,6 +48,12 @@ func main() {
 	}
 	if cfg.BaiduEnabled {
 		checkers = append(checkers, baidu.New(baidu.Options{Client: httpClient, Logger: log}))
+	}
+	if cfg.CaiyunEnabled {
+		checkers = append(checkers, caiyun.New(caiyun.Options{Client: httpClient, Logger: log}))
+	}
+	if cfg.Pan123Enabled {
+		checkers = append(checkers, pan123.New(pan123.Options{Client: httpClient, Logger: log}))
 	}
 
 	registry := checker.NewRegistry(checkers...)

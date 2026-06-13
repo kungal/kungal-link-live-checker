@@ -36,6 +36,11 @@ type Config struct {
 	// Baidu uses the shorturlinfo API (verified, docs/PROVIDERS.md); on by
 	// default. Anti-crawl is aggressive — consider a lower LLC_RATE_RPS.
 	BaiduEnabled bool
+
+	// Caiyun (和彩云) and 123pan are verified (docs/PROVIDERS.md); on by default.
+	// Xunlei needs device-id + captcha + login and is not implemented yet.
+	CaiyunEnabled bool
+	Pan123Enabled bool
 }
 
 // Load reads configuration from the environment, applying defaults.
@@ -54,6 +59,8 @@ func Load() Config {
 		UCEnabled:          envBool("LLC_UC_ENABLED", true),
 		UCTokenURL:         env("LLC_UC_TOKEN_URL", "https://pc-api.uc.cn/1/clouddrive/share/sharepage/token?pr=UCBrowser&fr=pc"),
 		BaiduEnabled:       envBool("LLC_BAIDU_ENABLED", true),
+		CaiyunEnabled:      envBool("LLC_CAIYUN_ENABLED", true),
+		Pan123Enabled:      envBool("LLC_PAN123_ENABLED", true),
 	}
 }
 

@@ -93,6 +93,21 @@ func TestCacheKeyDistinguishesPasscodePresence(t *testing.T) {
 	}
 }
 
+// Regression: caiyun-style URLs carry the share id in the query or fragment,
+// not the path. Distinct shares must not collide on one cache key.
+func TestCacheKeyDistinguishesByQueryAndFragment(t *testing.T) {
+	q1 := mustParse("https://caiyun.139.com/m/i?0a5CfleicjAWV")
+	q2 := mustParse("https://caiyun.139.com/m/i?0a5Cg5dWZPEYs")
+	if cacheKey(q1, "") == cacheKey(q2, "") {
+		t.Fatal("different query share ids must yield different keys")
+	}
+	f1 := mustParse("https://caiyun.139.com/front/#/detail?linkID=AAA")
+	f2 := mustParse("https://caiyun.139.com/front/#/detail?linkID=BBB")
+	if cacheKey(f1, "") == cacheKey(f2, "") {
+		t.Fatal("different fragment share ids must yield different keys")
+	}
+}
+
 func mustParse(s string) *url.URL {
 	u, _ := url.Parse(s)
 	return u

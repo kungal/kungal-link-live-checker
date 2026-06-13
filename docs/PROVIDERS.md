@@ -99,13 +99,48 @@
 
 ---
 
-## 和彩云 caiyun(6.6%)· 迅雷 xunlei(3.8%)· 123 盘(1.4%)—— Phase 3
+## 和彩云 caiyun(6.6%)✅ 已验证
 
-各自有分享详情/校验 API,返回确定性的"分享存在 / 不存在 / 需提取码"状态。逐家实测后补本档。已检索到端点(失效码均**待实测**,开源工具普遍只做 `code!=0 即失败`,不区分"已删除 vs 限流",这正是本服务要补的):
+- 分享 URL:`https://caiyun.139.com/m/i?<linkID>`(也有 `front/#/detail?linkID=<id>`,linkID 在 fragment)
+- 状态 API(**实测可用,明文、无需登录**——与社区传"必须 AES + Basic 鉴权"不同,读外链信息走明文即可):
+  ```
+  POST https://share-kd-njs.yun.139.com/yun-share/richlifeApp/devapp/IOutLink/getOutLinkInfoV6
+  Content-Type: application/json
+  Referer: https://yun.139.com/
+  Body: {"getOutLinkInfoReq":{"linkID":"<linkID>","pCaID":"root"}}
+  ```
+- 返回 `{"code":"<字符串码>","desc":"...","success":bool,"data":...}`。**`code` 映射**(实测):
 
-- **和彩云 `caiyun.139.com`**(中国移动):`POST https://share-kd-njs.yun.139.com/yun-share/richlifeApp/devapp/IOutLink/getOutLinkInfoV6`,body 含 `linkID`;**请求/响应是 AES-128-CBC**(硬编码 key `PVGDwmcvfs1uV3d1`)、需 `Authorization: Basic` 登录态。envelope `{"success":bool,...}`,失效表现为 `success:false` + message(确切串待抓)。源:`AlistGo/alist drivers/139`。
-- **迅雷 `pan.xunlei.com`**:`GET https://x-api-pan.xunlei.com/drive/v1/share?share_id=<id>&pass_code=<code>`;需 `x-captcha-token`(captcha init 流程)+ 设备签名 + 登录态。错误 envelope `{"error","error_code","error_description"}`;注意 `captcha_invalid` 是 `unknown` 不是 dead。源:`power721/alist drivers/thunder_share`。
-- **123 盘 `123pan` 系**(马甲域名 `123684/123865/123912.com` 等):`GET https://www.123pan.com/b/api/share/get?shareKey=<key>&SharePwd=<code>`;envelope `{"code","message","data"}`,`code:0` = alive,需签名 query + `platform:web` 头。失效码待实测(社区传 `5103` **未证实,勿用**)。源:`AlistGo/alist drivers/123_share`、`Y-ASLant/123pan`。
+  | `code` | desc | 判定 |
+  |---|---|---|
+  | `0` | (有 data) | `alive` / `share_ok` |
+  | `9188` | 提取码非法 | `alive`(分享存在·被提取码锁;存在即非 dead——见 §3.1 决策) |
+  | `200000727` | 外链不存在/外链被分享者取消 | **`dead` / `share_not_found`** |
+  | 其它 | —— | `unknown` |
+
+- 实测来源:论坛库 29 条最早和彩云分享(2026-06-13):`9188`×20、`0`×7、`200000727`×2。
+
+## 123 盘 123pan(1.4%)✅ 已验证
+
+- 分享 URL:`https://www.123pan.com/s/<key>`,马甲域名 `123912/123684/123865.com`、`123pan.cn`(**每个马甲是独立部署,API 必须打同一个 host**);也有个人子域 `<num>.share.123pan.cn/123pan/<key>`。
+- 状态 API(**实测可用,无需登录/无需签名**):`GET https://<同链接 host>/b/api/share/get?shareKey=<key>&SharePwd=<提取码>&...`,头带 `platform: web`、`app-version: 3`。
+- 返回 `{"code":<int>,"message":"...","data":...}`。**⚠️ `code 5103` 一码两义,必须看 `message` 区分**:
+
+  | `code` + `message` | 判定 |
+  |---|---|
+  | `0` | `alive` / `share_ok` |
+  | `5103` + `此分享不存在` | **`dead` / `share_not_found`** |
+  | `5103` + `提取码错误` | `alive`(分享存在·被锁;先用提取码 `SharePwd` 试,仍错则存在即非 dead) |
+  | `5103` + 其它 message | `unknown` |
+  | 其它 code | `unknown` |
+
+- 实测来源:论坛库多个马甲的 `/s/` 分享(2026-06-13)同时见到 `5103 此分享不存在`(dead)与 `5103 提取码错误`(alive)——**社区传的"5103=分享不存在"是半对:不看 message 直接判 dead 会误杀所有带密分享**。源(端点形态):`AlistGo/alist drivers/123_share`。
+
+## 迅雷 xunlei(3.8%)⏸ 暂缓(需设备签名+验证码+登录)
+
+- 分享 URL:`https://pan.xunlei.com/s/<share_id>`(常带 `?pwd=`)。
+- `GET https://x-api-pan.xunlei.com/drive/v1/share?share_id=<id>` 实测直接回 `{"error":"invalid_argument","error_code":3,"...":"device_id is empty"}`——**需要 `x-device-id` + `x-captcha-token`(captcha init 流程)+ 登录态**,无法匿名探测。错误 envelope `{"error","error_code","error_description"}`;`captcha_invalid` 属 `unknown` 非 dead。源:`power721/alist drivers/thunder_share`、`AlistGo/alist drivers/thunder_browser`。
+- 现状:**未实现**,迅雷链接走 `unknown / unsupported_provider`。投入产出比低(3.8% 且需逆向设备签名),留待后续;实现前必须像其它家一样先拿"已知失效分享"实测确认 dead 码。
 
 ---
 

@@ -36,6 +36,31 @@ push main ─► GitHub Actions(.github/workflows/build.yml)
 
 本服务会对网盘发**出站抓取**,出口 IP 可能被限流/封禁。**强烈建议跑在与 OAuth/身份(infra)分开的 Dokploy 服务器**上——封 IP 不得波及登录信任根。这正是它独立成仓、不并入 infra 的原因。同机部署能跑通,但共享出口 IP,有连带风险。
 
+## 备用:无 Docker 主机(PM2 / systemd,独立出口机)
+
+把 checker 放到一台**独立服务器**(出口 IP 与 OAuth/身份分离)时,无需 Docker——它是零依赖静态二进制。文件见 `deploy/`。
+
+布局:`/opt/link-checker/{llc, .env, logs, ecosystem.config.js}`(全部 owner=运行用户)。
+
+```bash
+# 1) 上二进制(目标机没装 Go → 本地交叉编译再 scp)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o llc ./cmd/server
+scp llc <host>:/opt/link-checker/llc
+
+# 2) 配置 + 密钥(chmod 600,绝不入库;ecosystem 从这里读)
+#    /opt/link-checker/.env:
+#      LLC_ADDR=127.0.0.1:8080      # 私网/回环;切勿 0.0.0.0
+#      LLC_API_KEYS=<openssl rand -hex 24>
+#      LLC_RATE_RPS=5
+
+# 3a) PM2(与其它 Node 服务统一管理)
+cd /opt/link-checker && pm2 start ecosystem.config.js && pm2 save
+#  更新:scp 新 llc → pm2 reload link-checker   (切勿加 --update-env:会丢掉 .env 里的 key)
+# 3b) 或 systemd(原生,无需 Node):见 deploy/link-checker.service
+```
+
+调用方:**同机**消费方(如论坛与 checker 同处一台)直接 `http://127.0.0.1:8080/v1/check` + `Authorization: Bearer <key>`;**跨机**用 Tailscale/WireGuard 或 SSH 反向隧道(别裸暴露公网)。失败/超时一律当 `unknown`。
+
 ## 本地
 
 ```bash

@@ -121,6 +121,14 @@ curl -s -X POST localhost:8080/v1/check \
 
 完整配置项见 [`.env.example`](.env.example)。代码结构:`cmd/server` 入口;`internal/checker` 三态核心与 provider 注册表;`internal/provider/*` 各网盘 checker;`internal/{cache,ratelimit,config,httpapi,service}` 地基。
 
+## 部署
+
+CI/CD 对齐 `kun-galgame-infra`:push `main` → GitHub Actions 测试 + 构建单二进制镜像推 GHCR(`:latest` + `:<sha>`)→ 触发 Dokploy webhook 拉取重部署。镜像 distroless(~17MB),自带 `healthcheck` 子命令。**出口 IP 须与 OAuth/身份服务隔离**(网盘封 IP 不得波及登录)。详见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+
+```bash
+docker compose up --build    # 本地;生产用 docker-compose.prod.yml(GHCR 镜像)
+```
+
 ## 名字
 
 `kungal-link-live-checker` —— kungal 生态里专做**网盘分享链接存活校验**(link **live**-ness checker)的服务,不是通用死链/SEO 爬虫。

@@ -1,0 +1,16 @@
+# Keep the build context to Go sources + go.mod only.
+.git
+.github
+/bin
+/dist
+*.test
+*.out
+coverage.out
+.env
+.env.*
+*.md
+docs/
+LICENSE
+Dockerfile
+.dockerignore
+docker-compose*.yml

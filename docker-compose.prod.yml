@@ -1,0 +1,44 @@
+# Production compose — Dokploy pulls the CI-built GHCR image (no build on the
+# prod host). See docs/DEPLOY.md. Dev/local build uses docker-compose.yml.
+#
+# ⚠️ Egress isolation (README / docs/REQUIREMENTS.md §7): this service makes
+# outbound crawls to netdisk APIs and CAN get its egress IP rate-limited/banned.
+# Run it on a Dokploy server SEPARATE from the OAuth/identity (infra) host so a
+# ban never touches the trust root. Same-host works but shares the egress IP.
+name: kungal-link-live-checker
+services:
+  link-checker:                                   # globally-unique name on dokploy-network
+    image: ghcr.io/kunmoe/kungal-link-live-checker:latest
+    environment:
+      LLC_ADDR: ":8080"
+      # s2s API keys, comma-separated, one per consumer. SECRET — set in the
+      # Dokploy Environment panel, never commit. Fail-closed: empty => all 401.
+      LLC_API_KEYS: ${LLC_API_KEYS:?set LLC_API_KEYS in the Dokploy Environment panel}
+      LLC_RATE_RPS: "5"
+      LLC_RATE_BURST: "5"
+      # optional tuning (defaults in internal/config): LLC_CHECK_TIMEOUT,
+      # LLC_CACHE_TTL_ALIVE/_DEAD/_UNKNOWN, LLC_QUARK_BLOCKED_AS_DEAD,
+      # LLC_BAIDU_ENABLED / LLC_CAIYUN_ENABLED / LLC_PAN123_ENABLED ...
+    expose: ["8080"]                              # internal only — never publish a host port
+    healthcheck:
+      test: ["CMD", "/app", "healthcheck"]        # binary self-probes /healthz (distroless has no curl)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    # Same-host consumers reach it as http://link-checker:8080 over dokploy-network.
+    # If the consumer (forum) is on a DIFFERENT host, expose a private domain via
+    # Traefik — the service's own Bearer API-key auth is the gate. Uncomment + set
+    # your domain:
+    # labels:
+    #   - traefik.enable=true
+    #   - traefik.http.routers.linkchecker.rule=Host(`link-checker.kungal.iloveren.link`)
+    #   - traefik.http.routers.linkchecker.entrypoints=websecure
+    #   - traefik.http.routers.linkchecker.tls.certresolver=letsencrypt
+    #   - traefik.http.services.linkchecker.loadbalancer.server.port=8080
+
+networks:
+  default:
+    name: dokploy-network
+    external: true

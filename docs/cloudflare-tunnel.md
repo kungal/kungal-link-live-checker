@@ -90,23 +90,23 @@ journalctl -u cloudflared -f         # 看连上 Cloudflare 边缘的日志
 
 ## 6. Cloudflare Access:把来源锁成"只有论坛"
 
-在 **Zero Trust 面板**(one.dash.cloudflare.com):
+> Zero Trust 面板(one.dash.cloudflare.com)已改版到 **Access controls** 一级目录,以下为当前(2026-06)路径。
 
 **6.1 建 service token**(给论坛这台非交互式调用方)
-- Access → **Service Auth → Service Tokens → Create Service Token**
-- 命名 `forum-link-checker`,创建后**当场复制** `Client ID`(形如 `xxxxx.access`)和 `Client Secret`(只显示一次)。
+- **Zero Trust → Access controls → Service credentials → Service Tokens → Create Service Token**
+- 命名 `forum-link-checker`,选 **Service Token Duration**(有效期;到期可在面板 **Refresh** 续 1 年),点 **Generate token**
+- 生成页**当场复制** `Client ID`(形如 `xxxxx.access`)和 `Client Secret`(连同对应的 header 名;**只显示这一次**,丢了只能重建)
 
 **6.2 建 Access Application 保护这个 hostname**
-- Access → **Applications → Add an application → Self-hosted**
-- Application name:`link-checker`;Subdomain `link-checker-kungal`,Domain `nextmoe.dev`(Path 留空 = 整个域)。
-- **Policy**:
-  - Action = **Service Auth**(非交互式,只认 token,不弹登录页)
-  - Include → **Service Token** → `forum-link-checker`
-  - 保存。这条策略 = "带正确 service token 才放行,其余全拒"。
-- (可选)再加一条默认 **Block** 策略兜底;只有一条 Service Auth include 时,未带 token 本就被拒。
-- 保存 Application。
+- **Zero Trust → Access controls → Applications → Create new application → Self-hosted and private → Add public hostname**
+- **Domain** 下拉选 `nextmoe.dev`,子域填 `link-checker-kungal`(或点 **Switch to custom input** 直接填 `link-checker-kungal.nextmoe.dev`)
+- **Policy**(可"add existing policy"或"create a new policy";Access **默认 deny**,只放行命中 include 的):
+  - **Action = Service Auth**(非交互式,只认 token,**不弹 IdP 登录页**)
+  - **Include** → Selector **Service Token** → 选 `forum-link-checker`
+- **Additional settings** 标签:打开 **「401 Response for Service Auth policies」** —— 没带(或带错)token 的请求直接回 **401**,而不是跳 HTML 登录页;对 API 调用方更干净。
+- 保存。
 
-> 这样:**没带 service token 的请求在 Cloudflare 边缘就被 403**,根本到不了 old 上的 cloudflared/服务。
+> 这样:**没带 service token 的请求在 Cloudflare 边缘就被挡掉(401)**,根本到不了 old 上的 cloudflared/服务。reusable policy 也可在 **Access controls → Policies** 单独管理。
 
 ## 7. 论坛侧(kungal-neo,等接闸门时)
 
@@ -142,14 +142,17 @@ curl -s https://link-checker-kungal.nextmoe.dev/v1/check \
   -H "Authorization: Bearer <LLC_API_KEY>" \
   -d '{"url":"https://pan.quark.cn/s/eb34b875e97f"}'        # 期望 alive
 
-# ② 不带 CF token → Cloudflare 边缘 403(连服务都到不了)
-curl -s -o /dev/null -w '%{http_code}\n' https://link-checker-kungal.nextmoe.dev/healthz   # 期望 403
+# ② 不带 CF token → 被 Cloudflare 边缘挡掉(开了「401 Response」设置则回 401)
+curl -s -i https://link-checker-kungal.nextmoe.dev/healthz | head -1   # 期望 401(若没开该设置则是 302→登录页)
+#    关键:body 不是本服务的 {"status":"ok"} / {"error":...},而是 Cloudflare 的拒绝响应 → 证明根本没进到服务
 
-# ③ 带 CF token 但 LLC key 错 → 服务返回 401
+# ③ 带 CF token 但 LLC key 错 → 进到服务、由服务回 401(body 是本服务 JSON)
 curl -s https://link-checker-kungal.nextmoe.dev/v1/check \
   -H "CF-Access-Client-Id: <ID>.access" -H "CF-Access-Client-Secret: <SECRET>" \
-  -H "Authorization: Bearer wrong" -d '{"url":"x"}'         # 期望 {"error":"unauthorized"}
+  -H "Authorization: Bearer wrong" -d '{"url":"x"}'         # 期望 {"error":"unauthorized"}(本服务返回)
 ```
+
+> ②③ 都可能是 401,**靠 body 区分**:② 是 Cloudflare 边缘的拒绝(没进服务)、③ 是本服务的 `{"error":"unauthorized"}`(进了服务、key 不对)。
 
 ## 9. 要点与排错
 

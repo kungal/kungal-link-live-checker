@@ -113,7 +113,7 @@ LLC_API_KEYS=$(openssl rand -hex 16) go run ./cmd/server
 调用(s2s,Bearer 鉴权):
 
 ```bash
-curl -s -X POST localhost:8080/v1/check \
+curl -s -X POST localhost:6734/v1/check \
   -H "Authorization: Bearer $LLC_API_KEYS" \
   -d '{"url":"https://pan.quark.cn/s/<pwd_id>","passcode":"<可选提取码>"}'
 # => {"provider":"quark","status":"alive|dead|unknown","reason":"...","providerCode":"...","cached":false}

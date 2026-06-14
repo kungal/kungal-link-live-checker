@@ -10,7 +10,7 @@ services:
   link-checker:                                   # globally-unique name on dokploy-network
     image: ghcr.io/kunmoe/kungal-link-live-checker:latest
     environment:
-      LLC_ADDR: ":8080"
+      LLC_ADDR: ":6734"
       # s2s API keys, comma-separated, one per consumer. SECRET — set in the
       # Dokploy Environment panel, never commit. Fail-closed: empty => all 401.
       LLC_API_KEYS: ${LLC_API_KEYS:?set LLC_API_KEYS in the Dokploy Environment panel}
@@ -19,7 +19,7 @@ services:
       # optional tuning (defaults in internal/config): LLC_CHECK_TIMEOUT,
       # LLC_CACHE_TTL_ALIVE/_DEAD/_UNKNOWN, LLC_QUARK_BLOCKED_AS_DEAD,
       # LLC_BAIDU_ENABLED / LLC_CAIYUN_ENABLED / LLC_PAN123_ENABLED ...
-    expose: ["8080"]                              # internal only — never publish a host port
+    expose: ["6734"]                              # internal only — never publish a host port
     healthcheck:
       test: ["CMD", "/app", "healthcheck"]        # binary self-probes /healthz (distroless has no curl)
       interval: 30s
@@ -27,7 +27,7 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
-    # Same-host consumers reach it as http://link-checker:8080 over dokploy-network.
+    # Same-host consumers reach it as http://link-checker:6734 over dokploy-network.
     # If the consumer (forum) is on a DIFFERENT host, expose a private domain via
     # Traefik — the service's own Bearer API-key auth is the gate. Uncomment + set
     # your domain:
@@ -36,7 +36,7 @@ services:
     #   - traefik.http.routers.linkchecker.rule=Host(`link-checker.kungal.iloveren.link`)
     #   - traefik.http.routers.linkchecker.entrypoints=websecure
     #   - traefik.http.routers.linkchecker.tls.certresolver=letsencrypt
-    #   - traefik.http.services.linkchecker.loadbalancer.server.port=8080
+    #   - traefik.http.services.linkchecker.loadbalancer.server.port=6734
 
 networks:
   default:

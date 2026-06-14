@@ -2,7 +2,7 @@
 // is a zero-dependency static Go executable; PM2 just supervises it.
 //
 // Config + secrets are read from /opt/link-checker/.env (chmod 600, NOT in git):
-//   LLC_ADDR=127.0.0.1:8080         # bind PRIVATE only (loopback / Tailscale IP); never 0.0.0.0
+//   LLC_ADDR=127.0.0.1:6734         # bind PRIVATE only (loopback / Tailscale IP); never 0.0.0.0
 //   LLC_API_KEYS=<comma-separated>  # s2s keys, one per consumer; empty => fail-closed (all 401)
 //   LLC_RATE_RPS=5
 //
@@ -32,7 +32,7 @@ module.exports = {
       script: '/opt/link-checker/llc',
       cwd: '/opt/link-checker',
       env: {
-        LLC_ADDR: cfg.LLC_ADDR || '127.0.0.1:8080',
+        LLC_ADDR: cfg.LLC_ADDR || '127.0.0.1:6734',
         LLC_API_KEYS: cfg.LLC_API_KEYS || '',
         LLC_RATE_RPS: cfg.LLC_RATE_RPS || '5',
       },

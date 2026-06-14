@@ -29,7 +29,7 @@ push main ─► GitHub Actions(.github/workflows/build.yml)
 
 ## 网络与消费方
 
-- 接 `dokploy-network`(external),服务名 `link-checker`(全局唯一)。**同机**消费方(论坛)直接 `http://link-checker:8080/v1/check`,带 `Authorization: Bearer <key>`。
+- 接 `dokploy-network`(external),服务名 `link-checker`(全局唯一)。**同机**消费方(论坛)直接 `http://link-checker:6734/v1/check`,带 `Authorization: Bearer <key>`。
 - **不发布宿主端口、不默认开公网域名**(s2s,绝不匿名公开)。跨机消费方再按需用 Traefik 私有域名(compose 里有注释模板,鉴权仍靠服务自身的 API-key)。
 
 ## ⚠️ 出口 IP 隔离(架构铁律,REQUIREMENTS §7)
@@ -49,7 +49,7 @@ scp llc <host>:/opt/link-checker/llc
 
 # 2) 配置 + 密钥(chmod 600,绝不入库;ecosystem 从这里读)
 #    /opt/link-checker/.env:
-#      LLC_ADDR=127.0.0.1:8080      # 私网/回环;切勿 0.0.0.0
+#      LLC_ADDR=127.0.0.1:6734      # 私网/回环;切勿 0.0.0.0
 #      LLC_API_KEYS=<openssl rand -hex 24>
 #      LLC_RATE_RPS=5
 
@@ -59,7 +59,7 @@ cd /opt/link-checker && pm2 start ecosystem.config.js && pm2 save
 # 3b) 或 systemd(原生,无需 Node):见 deploy/link-checker.service
 ```
 
-调用方:**同机**消费方(如论坛与 checker 同处一台)直接 `http://127.0.0.1:8080/v1/check` + `Authorization: Bearer <key>`;**跨机**用 Tailscale/WireGuard 或 SSH 反向隧道(别裸暴露公网)。失败/超时一律当 `unknown`。
+调用方:**同机**消费方(论坛与 checker 同处一台)直接 `http://127.0.0.1:6734/v1/check` + `Authorization: Bearer <key>`;**跨机**(论坛在 Dokploy/kungal-neo、checker 在 kungal-old)用 **Cloudflare Tunnel + Access**——详见 [`cloudflare-tunnel.md`](./cloudflare-tunnel.md)(old 零入站端口、Access service token 锁来源 + API key 双层)。失败/超时一律当 `unknown`。
 
 ## 本地
 

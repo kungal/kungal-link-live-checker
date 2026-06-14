@@ -1,6 +1,6 @@
 # Local/dev: build the image locally and run with a throwaway API key.
 #   docker compose up --build
-#   curl -H 'Authorization: Bearer devkey' -X POST localhost:8080/v1/check \
+#   curl -H 'Authorization: Bearer devkey' -X POST localhost:6734/v1/check \
 #        -d '{"url":"https://pan.quark.cn/s/<id>"}'
 # Production uses docker-compose.prod.yml (pre-built GHCR image).
 name: kungal-link-live-checker-dev
@@ -9,5 +9,5 @@ services:
     build: .
     environment:
       LLC_API_KEYS: devkey
-    ports: ["8080:8080"]
+    ports: ["6734:6734"]
     restart: unless-stopped

@@ -46,7 +46,7 @@ type Config struct {
 // Load reads configuration from the environment, applying defaults.
 func Load() Config {
 	return Config{
-		Addr:               env("LLC_ADDR", ":8080"),
+		Addr:               env("LLC_ADDR", ":6734"),
 		APIKeys:            splitNonEmpty(env("LLC_API_KEYS", "")),
 		CheckTimeout:       envDuration("LLC_CHECK_TIMEOUT", 8*time.Second),
 		BatchMax:           envInt("LLC_BATCH_MAX", 50),

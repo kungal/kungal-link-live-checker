@@ -21,7 +21,7 @@ FROM gcr.io/distroless/static-debian13:nonroot
 LABEL org.opencontainers.image.source="https://github.com/kungal/kungal-link-live-checker"
 COPY --from=build /out/app /app
 USER nonroot:nonroot
-EXPOSE 8080
+EXPOSE 6734
 # distroless has no curl/wget — the binary probes its own /healthz.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
         CMD ["/app", "healthcheck"]

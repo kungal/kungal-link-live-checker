@@ -18,7 +18,7 @@ import (
 // immediately when the binary was not invoked as `<bin> healthcheck`. It is a
 // no-op unless os.Args[1] == "healthcheck", so it is safe to call at the very
 // top of main() — it only needs the already-running HTTP server, not any of its
-// dependencies. addr is the server listen address (e.g. ":8080"); path is the
+// dependencies. addr is the server listen address (e.g. ":6734"); path is the
 // unauthenticated health endpoint.
 func MaybeProbe(addr, path string) {
 	if len(os.Args) < 2 || os.Args[1] != "healthcheck" {
@@ -27,7 +27,7 @@ func MaybeProbe(addr, path string) {
 
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		port = "8080"
+		port = "6734"
 	}
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "127.0.0.1"

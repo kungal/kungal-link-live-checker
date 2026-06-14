@@ -3,7 +3,7 @@
 #
 #   sudo cp /opt/link-checker/src/deploy/link-checker.service /etc/systemd/system/
 #   sudo install -m600 /dev/stdin /etc/link-checker.env <<'EOF'
-#   LLC_ADDR=127.0.0.1:8080
+#   LLC_ADDR=127.0.0.1:6734
 #   LLC_API_KEYS=<comma-separated-keys>
 #   LLC_RATE_RPS=5
 #   EOF

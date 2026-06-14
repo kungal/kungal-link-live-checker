@@ -4,6 +4,8 @@
 >
 > 本服务端口 **6734**,对外 hostname **`link-checker-kungal.nextmoe.dev`**(`nextmoe.dev` 需是你 Cloudflare 账号下的 zone)。
 
+> ✅ **本环境已部署并实测通过(2026-06-14)** —— 隧道 + Access service token 双层鉴权三连验证全过。状态与论坛对接清单见 [§11](#11-本环境状态--论坛对接清单2026-06-14-实测)。
+
 ## 0. 为什么是这套
 
 ```
@@ -169,3 +171,38 @@ sudo systemctl disable --now cloudflared
 sudo cloudflared tunnel delete link-checker      # 删 tunnel
 # 面板删掉 Access Application + Service Token + DNS 记录
 ```
+
+## 11. 本环境状态 + 论坛对接清单(2026-06-14 实测)
+
+### 已落地
+| 项 | 值 |
+|---|---|
+| 部署主机 | **kungal-old**(独立出口 IP,与 neo 的身份服务隔离),PM2 app `link-checker`,绑 `127.0.0.1:6734` |
+| 公网 hostname | `https://link-checker-kungal.nextmoe.dev`(cloudflared 隧道,old **零入站端口**) |
+| Access Application | self-hosted,Domain `nextmoe.dev` / Subdomain `link-checker-kungal` |
+| Access Policy | **Action = Service Auth**,Include → Service Token = `kungal-link-checker`;开启 **「401 Response for Service Auth policies」** |
+| 鉴权两层 | ① CF Access(边缘,只认 service token)② 服务自身 `Authorization: Bearer <LLC key>` |
+
+### 实测验证(三连全过)
+| 请求 | 结果 | 结论 |
+|---|---|---|
+| 无 CF token → 任意路径 | `401` + body 为 Cloudflare Access 错误页 | **边缘挡掉,没进服务** |
+| CF token + 正确 LLC key | `{"status":"alive",...}` | 双层都过,判定正常 |
+| CF token + 错误 LLC key | `{"error":"unauthorized"}` | 过边缘、被**服务**挡 |
+
+> 「绝不对公网匿名开放」由此真正落地:没 service token 的请求在 Cloudflare 边缘即被拒,触达不到 old 上的服务。
+
+### 论坛对接清单(等接闸门时)
+- [ ] 论坛 Dokploy **Environment 面板**填 4 个值(**绝不入库**;实际值取自 CF 面板的 service token 与服务 `/opt/link-checker/.env` 的 key):
+  - `LINK_CHECKER_BASE_URL` = `https://link-checker-kungal.nextmoe.dev`
+  - `CF_ACCESS_CLIENT_ID` = `<service token Client ID,形如 xxx.access>`
+  - `CF_ACCESS_CLIENT_SECRET` = `<service token Client Secret>`
+  - `LINK_CHECKER_API_KEY` = `<LLC API key>`
+- [ ] 调用 `POST {BASE}/v1/check`,带三个头:`CF-Access-Client-Id` / `CF-Access-Client-Secret` / `Authorization: Bearer <key>`,body `{"url","passcode"}`
+- [ ] 紧超时(如 8s);**任何失败/超时/非 2xx 一律当 `unknown`**,回退人工
+- [ ] 按返回接闸门:`dead`→自动失效、`alive`→驳回误报、`unknown`→人工(REQUIREMENTS §6)
+
+### 运维提醒
+- service token 有有效期 → 到期在 **Access controls → Service credentials** 里 **Refresh**。
+- 轮换 LLC key:改 `/opt/link-checker/.env` 后 `pm2 reload link-checker`(**别加 `--update-env`**)。
+- 换 CF service token / key 后,记得同步论坛 Environment 面板的 4 个值。

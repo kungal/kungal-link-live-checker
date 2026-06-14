@@ -1,0 +1,34 @@
+# systemd unit for kungal-link-live-checker — the native option on a Debian box
+# (no Node/PM2 runtime needed). Install:
+#
+#   sudo cp /opt/link-checker/src/deploy/link-checker.service /etc/systemd/system/
+#   sudo install -m600 /dev/stdin /etc/link-checker.env <<'EOF'
+#   LLC_ADDR=127.0.0.1:8080
+#   LLC_API_KEYS=<comma-separated-keys>
+#   LLC_RATE_RPS=5
+#   EOF
+#   sudo systemctl daemon-reload && sudo systemctl enable --now link-checker
+#   journalctl -u link-checker -f      # logs (JSON to journald)
+[Unit]
+Description=kungal-link-live-checker (netdisk share liveness checker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Secrets + non-default config — chmod 600, never committed.
+EnvironmentFile=/etc/link-checker.env
+ExecStart=/opt/link-checker/llc
+Restart=always
+RestartSec=3
+
+# Hardening: transient unprivileged user, read-only FS, private tmp. The binary
+# writes nothing to disk (logs go to journald) and binds a high port.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -54,8 +54,8 @@ A provider's status codes are **obtained by actual measurement**, not guessed. `
 ```bash
 curl -s -X POST "https://drive-pc.quark.cn/1/clouddrive/share/sharepage/token?pr=ucpro&fr=pc" \
   -H "Content-Type: application/json" -H "Referer: https://pan.quark.cn/" \
-  --data '{"pwd_id":"<分享id>","passcode":"<提取码或空>"}'
-# code:0=有效  41008=需提取码(unknown)  41031=受限(默认dead)  分享不存在的确切 code 待你用"已知失效分享"确认
+  --data '{"pwd_id":"<share_id>","passcode":"<passcode_or_empty>"}'
+# code:0=alive  41008=passcode required (unknown)  41031=restricted (dead by default)  the exact code for a non-existent share is for you to confirm with a known-dead share
 ```
 
 Note: ① some cloud-drive APIs behave differently for **non-mainland-China IPs**; if local re-verification looks off, first rule out geo/network factors; ② **mandatory in Phase 1**: find a share that is **definitely deleted**, confirm the exact return code for "does not exist / deleted," and add it to PROVIDERS.md — until that is confirmed, only verified codes may map to `dead`, everything else is `unknown`.
@@ -66,7 +66,7 @@ The first consumer is **kun-galgame-forum** (the forum). It wires this service i
 ## Scope Discipline (don't over-build, don't drift)
 - **Eat the big chunks first**: Quark/UC (~36%, API verified) → Baidu (35.6%, the hardest, tackle it after the framework matures) → Caiyun / Xunlei / 123. The ~16% tail of magnet links / OneDrive / Mega / partner sites / image hosts is **all `unknown`**, left to downstream manual handling — **don't** go build them site-by-site from the start.
 - **Complexity must be paid for by payoff**: don't prematurely adopt a proxy pool / async / Redis / background re-checking — in REQUIREMENTS §10 these are "to be decided"; add them only when there's a real need. For Phase 1, single IP + synchronous + in-memory cache is enough to get it working.
-- Ambiguous design decisions (e.g. whether `41031 受限` counts as `dead` or `unknown`, the cache backend, async) are listed in REQUIREMENTS §10 — **ask the repo owner first**, don't decide on your own.
+- Ambiguous design decisions (e.g. whether `41031 restricted` counts as `dead` or `unknown`, the cache backend, async) are listed in REQUIREMENTS §10 — **ask the repo owner first**, don't decide on your own.
 
 ## In One Sentence
 The core value you deliver is: **for supported cloud drives, only say `dead` when you are 100% certain the link is dead; otherwise honestly say `unknown`.** Hold that line, and everything else is engineering detail.

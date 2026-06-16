@@ -1,40 +1,55 @@
-# CLAUDE.md — 给接手本项目的 AI 代理
+# CLAUDE.md — For the AI Agent Taking Over This Project
 
-> 这是一个 **Go 微服务**:给定一个网盘分享链接(可带提取码),用各网盘**自家的分享状态 JSON API** 客观判断它 **有效 / 已失效 / 无法判定**。目的是替代下游"用户主观报告即失效"的误报机制。
+> This is a **Go microservice**: given a cloud-drive share link (optionally with a passcode), it uses each cloud drive's **own share-status JSON API** to objectively determine whether the link is **alive / dead / unknown**. The goal is to replace the downstream "a user's subjective report = dead" mechanism that produces false positives.
 
-## 先读这三份(顺序别错)
-1. **`README.md`** —— 项目门面:为什么做、80/20 数据、三态契约、报告闸门、路线图。
-2. **`docs/REQUIREMENTS.md`** —— 权威需求与设计。**实现以它为准。** 含 API、架构、集成、反爬运维、实测分布、开放问题。
-3. **`docs/PROVIDERS.md`** —— 各网盘逆向参考 + 状态码映射(含实测证据:夸克 `code` 表、百度反爬、分类 SQL)。
+## Core Engineering Principles
 
-读完这三份你就掌握全部背景。本文件只补充"作为代理你要特别记住的东西"。
+> Shared baseline across all KUN Galgame repositories. Defaults, not dogma — apply judgment.
 
-## 当前状态
-- **只有文档,没有代码。** 你接手时仓库是设计骨架(README + docs + go.mod + .gitignore)。
-- 你的第一项工作通常是 **Phase 0(骨架)→ Phase 1(夸克 + UC)**,见 README/REQUIREMENTS 路线图。
-- module path:`github.com/KunMoe/kungal-link-live-checker`(Go 1.23)。栈追求**最小依赖、单二进制**;HTTP 用 stdlib `net/http` 即可,别无脑引重框架。
+1. All commit messages must be written entirely in English.
+2. All code comments must be written entirely in English.
+3. Keep each source file under ~500 lines where practical; once a file grows past ~300 lines, consider splitting it (a guideline, not a hard rule).
+4. Write every frontend function as an arrow function; compose/merge class names with `cn` wherever practical.
+5. Deliberately balance elegant modularity against necessary duplication — choose per case instead of always favoring either.
+6. Constantly verify that frontend and backend agree on the data: field shapes and response formats must match what each side expects.
+7. After every change, watch for unintended side effects elsewhere.
+8. If a change requires running a migration, tell the user explicitly at the end — which command, and against which database.
+9. Always seek the most modern, elegant solution that fits the project's current state; consult the latest official docs and resources online when useful.
+10. Never let the pursuit of elegance or modularity make the code complex or hard to follow, and don't write over-defensive code.
 
-## 不可违反的铁律(整个项目的命根子)
+## Read These Three First (don't get the order wrong)
+1. **`README.md`** — the project's front door: why it exists, the 80/20 data, the three-state contract, the report gate, the roadmap.
+2. **`docs/REQUIREMENTS.md`** — the authoritative requirements and design. **The implementation follows this.** Covers the API, architecture, integration, anti-scraping operations, measured distributions, and open questions.
+3. **`docs/PROVIDERS.md`** — reverse-engineering reference for each cloud drive + status-code mappings (including measured evidence: the Quark `code` table, Baidu anti-scraping, classification SQL).
 
-**保守三态:`alive` / `dead` / `unknown`。**
+Once you've read these three, you have all the background. This file only adds "the things you, as the agent, must especially keep in mind."
 
-1. **只有**网盘 API **明确返回"分享不存在 / 已删除 / 已取消 / 已失效 / 已屏蔽"**时,才返回 `dead`。
-2. **其余一切**——缺提取码、限流、验证码、超时、网络错误、不支持的网盘、**任何看不懂/没见过的响应**——**一律 `unknown`,永不 `dead`。**
-3. 原因:下游会**仅凭 `dead` 就自动把资源标记失效**。网盘 API 一定会变;只要你坚持"看不懂=unknown",API 漂移最坏只是退化成人工兜底,**绝不会误杀一条好链接**。这是用"宁可漏报、绝不误报"换下游对 `dead` 的无条件信任。
-4. 写任何 provider checker 时,先问自己:"这个分支会不会在'我其实不确定'的时候吐 `dead`?" 如果会,改成 `unknown`。
+## Current Status
+- **Documentation only, no code yet.** When you take over, the repo is a design skeleton (README + docs + go.mod + .gitignore).
+- Your first task is usually **Phase 0 (skeleton) → Phase 1 (Quark + UC)**; see the README/REQUIREMENTS roadmap.
+- module path: `github.com/KunMoe/kungal-link-live-checker` (Go 1.23). The stack aims for **minimal dependencies, a single binary**; use stdlib `net/http` for HTTP — don't mindlessly pull in a heavy framework.
 
-违反这条 = 把项目的核心价值(消灭误报)亲手毁掉。
+## The Iron Rule You Must Never Break (the lifeblood of the entire project)
 
-## 实现要点(别踩的坑)
-- **不要抓 HTML 找关键词**。网盘是 SPA + 反爬:百度裸 curl 直接 `302`、夸克 HTML 是恒定长度的空壳。真实状态在它们的 **JSON API**里。逐家逆向那个 API。
-- **带上提取码**:调用方会传 `passcode`(或 URL 的 `?pwd=`)。加密分享不带码会得到"需提取码",那是 `unknown` 不是 `dead`——务必先带码重试。
-- **provider 插件化**:每家一个实现 `Checker` 接口(`Matches(url)` / `Name()` / `Check(ctx,url,passcode) → Verdict{Status,Reason,ProviderCode}`)。URL 不命中任何 provider → `unknown / unsupported_provider`。核心**不掺任何下游业务**(失效计数/通知/阈值都在下游)。
-- **按需、低频、带缓存与退避**。**绝不做全量爬取**(全量必被网盘封 IP)。`dead` 长缓存、`alive` 中等、`unknown` 极短或不缓存。
-- **s2s 鉴权**,每个消费方一把 key;**绝不**对公网匿名开放(否则成了公共网盘探测代理 + 招封)。
-- **密钥绝不入库**:API key / 代理凭证走 env / 配置文件,已在 `.gitignore` 里挡掉 `.env*`、`config.local.*`。
+**Conservative three-state: `alive` / `dead` / `unknown`.**
 
-## 如何验证 provider 行为(关键)
-provider 的状态码是**实测得来**的,不是猜的。`docs/PROVIDERS.md` 记了截至 2026-06-13 的实测结果。你要**亲自对真实 API 复验**再写死映射。例如夸克(已验证可直连):
+1. **Only** when the cloud-drive API **explicitly returns "share does not exist / deleted / cancelled / expired / blocked"** may you return `dead`.
+2. **Everything else** — missing passcode, rate limiting, captcha, timeout, network error, unsupported cloud drive, **any response you don't understand or have never seen** — **is always `unknown`, never `dead`.**
+3. Reason: the downstream will **automatically mark a resource as dead based on `dead` alone**. The cloud-drive APIs will inevitably change; as long as you stick to "don't understand = unknown," the worst case of API drift is degrading to a manual fallback — it will **never wrongly kill a good link**. This trades "rather miss than misreport" for the downstream's unconditional trust in `dead`.
+4. When writing any provider checker, first ask yourself: "Could this branch emit `dead` when I'm actually not sure?" If so, change it to `unknown`.
+
+Breaking this rule = destroying the project's core value (eliminating false positives) with your own hands.
+
+## Implementation Notes (pitfalls to avoid)
+- **Do not scrape HTML for keywords.** The cloud drives are SPAs + anti-scraping: a bare curl to Baidu gets a straight `302`, and Quark's HTML is a fixed-length empty shell. The real status lives in their **JSON APIs**. Reverse-engineer that API for each provider.
+- **Bring the passcode**: the caller will pass a `passcode` (or the URL's `?pwd=`). An encrypted share without a passcode returns "passcode required," which is `unknown`, not `dead` — always retry with the passcode first.
+- **Pluggable providers**: each one implements the `Checker` interface (`Matches(url)` / `Name()` / `Check(ctx,url,passcode) → Verdict{Status,Reason,ProviderCode}`). A URL that matches no provider → `unknown / unsupported_provider`. The core **contains no downstream business logic** (failure counting / notifications / thresholds all live downstream).
+- **On-demand, low-frequency, with caching and backoff.** **Never do a full crawl** (a full crawl will inevitably get your IP banned by the cloud drive). Cache `dead` for a long time, `alive` medium, `unknown` very briefly or not at all.
+- **s2s authentication**, one key per consumer; **never** expose it anonymously to the public internet (otherwise it becomes a public cloud-drive probing proxy + invites bans).
+- **Never store secrets in the database**: API keys / proxy credentials go through env / config files; `.gitignore` already blocks `.env*` and `config.local.*`.
+
+## How to Verify Provider Behavior (critical)
+A provider's status codes are **obtained by actual measurement**, not guessed. `docs/PROVIDERS.md` records the measured results as of 2026-06-13. You must **re-verify against the real API yourself** before hardcoding the mapping. For example, Quark (verified directly reachable):
 
 ```bash
 curl -s -X POST "https://drive-pc.quark.cn/1/clouddrive/share/sharepage/token?pr=ucpro&fr=pc" \
@@ -43,15 +58,15 @@ curl -s -X POST "https://drive-pc.quark.cn/1/clouddrive/share/sharepage/token?pr
 # code:0=有效  41008=需提取码(unknown)  41031=受限(默认dead)  分享不存在的确切 code 待你用"已知失效分享"确认
 ```
 
-注意:① 部分网盘 API 对**非中国大陆 IP** 行为不同,本机复验若异常,先排除地域/网络因素;② **Phase 1 必做**:找一条**确定已删除**的分享,确认"不存在/已删除"的确切返回码,补进 PROVIDERS.md——在确认前,只有已验证的码才能映射成 `dead`,其余 `unknown`。
+Note: ① some cloud-drive APIs behave differently for **non-mainland-China IPs**; if local re-verification looks off, first rule out geo/network factors; ② **mandatory in Phase 1**: find a share that is **definitely deleted**, confirm the exact return code for "does not exist / deleted," and add it to PROVIDERS.md — until that is confirmed, only verified codes may map to `dead`, everything else is `unknown`.
 
-## 消费方背景(你不必动它,但要知道)
-第一个消费方是 **kun-galgame-forum**(论坛)。它把本服务接成"用户报告失效"的**闸门**:`dead`→自动失效、`alive`→当场驳回误报、`unknown`→回退它自己的人工机制。也就是说本服务**只回判定,不碰下游业务**。集成细节见 REQUIREMENTS §6。未来 moyu(补丁站)也会复用。
+## Consumer Background (you don't have to touch it, but you should know it)
+The first consumer is **kun-galgame-forum** (the forum). It wires this service in as the **gate** for "user reports a link as dead": `dead` → auto-mark dead, `alive` → reject the false report on the spot, `unknown` → fall back to its own manual mechanism. In other words, this service **only returns a verdict, it never touches downstream business**. Integration details are in REQUIREMENTS §6. In the future moyu (the patch site) will also reuse it.
 
-## 范围纪律(别过度,也别跑偏)
-- **先吃大头**:夸克/UC(~36%,API 已验证)→ 百度(35.6%,最难,框架成熟后再啃)→ 和彩云/迅雷/123。磁链/onedrive/mega/友站/图床这 ~16% 的尾巴**一律 `unknown`**,留给下游人工,**别**一开始就去逐站做。
-- **复杂度要由收益偿付**:别提前上代理池/异步/Redis/后台复检——这些在 REQUIREMENTS §10 是"待决策",等真有需要再上。Phase 1 单 IP + 同步 + 内存缓存就够跑通。
-- 有歧义的设计抉择(如 `41031 受限`算 `dead` 还是 `unknown`、缓存后端、异步)在 REQUIREMENTS §10 列着——**先问仓库所有者**,别擅自定。
+## Scope Discipline (don't over-build, don't drift)
+- **Eat the big chunks first**: Quark/UC (~36%, API verified) → Baidu (35.6%, the hardest, tackle it after the framework matures) → Caiyun / Xunlei / 123. The ~16% tail of magnet links / OneDrive / Mega / partner sites / image hosts is **all `unknown`**, left to downstream manual handling — **don't** go build them site-by-site from the start.
+- **Complexity must be paid for by payoff**: don't prematurely adopt a proxy pool / async / Redis / background re-checking — in REQUIREMENTS §10 these are "to be decided"; add them only when there's a real need. For Phase 1, single IP + synchronous + in-memory cache is enough to get it working.
+- Ambiguous design decisions (e.g. whether `41031 受限` counts as `dead` or `unknown`, the cache backend, async) are listed in REQUIREMENTS §10 — **ask the repo owner first**, don't decide on your own.
 
-## 一句话
-你交付的核心价值是:**对支持的网盘,只在 100% 确定失效时说 `dead`;其余诚实地说 `unknown`。** 守住这条,其余都是工程细节。
+## In One Sentence
+The core value you deliver is: **for supported cloud drives, only say `dead` when you are 100% certain the link is dead; otherwise honestly say `unknown`.** Hold that line, and everything else is engineering detail.

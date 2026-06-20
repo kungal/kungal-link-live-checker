@@ -1,5 +1,11 @@
 # CLAUDE.md — For the AI Agent Taking Over This Project
 
+## 铁律 (Iron Rules — non-negotiable; these override every other guideline in this file)
+
+1. **Commit, but do not push.** Commit changes whenever appropriate, but do not run `git push` on your own initiative — the user pushes. When a push is genuinely required, and especially when several repos must be pushed in a specific order, stop and tell the user the exact push order instead of pushing yourself.
+2. **No background gradients in any UI, ever.** Never use gradient backgrounds in UI design (`bg-gradient-*`, `from-*/via-*/to-*`, `linear-gradient()`, `radial-gradient()`, `conic-gradient()`, etc.); use solid colors from the project's palette.
+
+
 > This is a **Go microservice**: given a cloud-drive share link (optionally with a passcode), it uses each cloud drive's **own share-status JSON API** to objectively determine whether the link is **alive / dead / unknown**. The goal is to replace the downstream "a user's subjective report = dead" mechanism that produces false positives.
 
 ## Core Engineering Principles

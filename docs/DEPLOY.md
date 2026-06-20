@@ -8,7 +8,7 @@
 push main ─► GitHub Actions(.github/workflows/build.yml)
               ├─ test : gofmt + go vet + go test -race(铁律守卫测试在此把关)
               ├─ build: 构建单二进制镜像 → 推 GHCR
-              │         ghcr.io/kunmoe/kungal-link-live-checker:{latest, <git-sha>}
+              │         ghcr.io/kungal/kungal-link-live-checker:{latest, <git-sha>}
               └─ deploy: curl Dokploy webhook(未设 secret 时优雅跳过)
                           │
                           ▼

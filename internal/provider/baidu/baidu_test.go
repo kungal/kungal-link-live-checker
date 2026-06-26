@@ -57,7 +57,7 @@ func TestErrnoMapping(t *testing.T) {
 		wantReason string
 	}{
 		{"public ok -> alive", 0, checker.StatusAlive, checker.ReasonShareOK},
-		{"passcode-protected -> alive", -9, checker.StatusAlive, checker.ReasonShareOK},
+		{"passcode-protected -9 -> unknown (NOT alive: -9 confirms nothing)", -9, checker.StatusUnknown, checker.ReasonPasscodeRequired},
 		{"deleted -21 -> dead", -21, checker.StatusDead, checker.ReasonShareNotFound},
 		{"malformed 140 -> unknown", 140, checker.StatusUnknown, checker.ReasonUnparseable},
 		{"unseen errno -> unknown", -55, checker.StatusUnknown, checker.ReasonUnparseable},
@@ -96,6 +96,23 @@ func TestNonJSONBodyIsUnknown(t *testing.T) {
 	got := c.Check(context.Background(), mustURL(t, "https://pan.baidu.com/s/1abcDEF"), "")
 	if got.Status != checker.StatusUnknown || got.Reason != checker.ReasonUnparseable {
 		t.Fatalf("got %+v, want unknown/unparseable", got)
+	}
+}
+
+// A JSON envelope with no errno field must NOT default to alive (errno 0).
+func TestMissingErrnoIsUnknown(t *testing.T) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			http.SetCookie(w, &http.Cookie{Name: "BAIDUID", Value: "t"})
+		default:
+			_, _ = io.WriteString(w, `{"shareid":123,"uk":456}`) // no errno
+		}
+	})
+	c := newChecker(t, h)
+	got := c.Check(context.Background(), mustURL(t, "https://pan.baidu.com/s/1abcDEF"), "")
+	if got.Status != checker.StatusUnknown {
+		t.Fatalf("missing errno: got %+v, want unknown (never alive)", got)
 	}
 }
 

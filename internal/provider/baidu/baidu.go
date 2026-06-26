@@ -89,7 +89,7 @@ func extractShort(u *url.URL) string {
 }
 
 type shortURLInfo struct {
-	Errno   int    `json:"errno"`
+	Errno   *int   `json:"errno"` // pointer: a missing errno must NOT default to 0/alive
 	ShowMsg string `json:"show_msg"`
 }
 
@@ -133,20 +133,32 @@ func (c *Checker) Check(ctx context.Context, u *url.URL, _ string) checker.Verdi
 }
 
 func (c *Checker) mapErrno(info shortURLInfo) checker.Verdict {
-	code := strconv.Itoa(info.Errno)
-	switch info.Errno {
-	case 0, -9:
-		// 0 = public share OK; -9 = exists but passcode-protected. Either way
-		// the share link is live, so a "dead" report should be rejected.
+	if info.Errno == nil {
+		// Valid JSON but no errno field — an anti-bot / changed-API envelope.
+		// Never Alive on a missing code.
+		return checker.Unknown(checker.ReasonUnparseable, "")
+	}
+	errno := *info.Errno
+	code := strconv.Itoa(errno)
+	switch errno {
+	case 0:
+		// Public share, no passcode — confirmed accessible.
 		return checker.Alive(checker.ReasonShareOK, code)
+	case -9:
+		// Passcode-protected. shorturlinfo will NOT reveal the real state without
+		// the passcode and returns -9 for dead-locked shares too (a known-dead
+		// link was observed returning -9, then -21). So -9 confirms nothing —
+		// Unknown, not Alive. Unlike caiyun/123pan, Baidu has no distinct
+		// "not found" message at this layer to separate dead-locked from
+		// alive-locked. See docs/PROVIDERS.md.
+		return checker.Unknown(checker.ReasonPasscodeRequired, code)
 	case -21:
-		// Verified: the share page renders "页面不存在" — deleted/cancelled/expired.
+		// Verified: the share page renders "百度网盘-链接不存在" — gone.
 		return checker.Dead(checker.ReasonShareNotFound, code)
 	default:
-		// errno 140 (malformed link) and anything else: not a verified dead
-		// signal — stay Unknown and log so anti-crawl/API drift is visible.
+		// errno 140 (malformed link) and anything else: not a verified signal.
 		c.logger.Warn("unrecognized baidu errno; treating as unknown (possible anti-crawl or API drift)",
-			"errno", info.Errno, "show_msg", info.ShowMsg)
+			"errno", errno, "show_msg", info.ShowMsg)
 		return checker.Unknown(checker.ReasonUnparseable, code)
 	}
 }

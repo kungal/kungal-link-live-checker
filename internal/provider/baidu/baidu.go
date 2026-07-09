@@ -93,13 +93,16 @@ type shortURLInfo struct {
 	ShowMsg string `json:"show_msg"`
 }
 
-// Check probes the share. A passcode is not needed to tell alive from dead:
-// shorturlinfo distinguishes "exists (errno 0/-9)" from "gone (errno -21)"
-// without it.
-func (c *Checker) Check(ctx context.Context, u *url.URL, _ string) checker.Verdict {
+// Check probes the share via shorturlinfo, then resolves the ambiguous -9
+// (passcode-protected) case with the share page. The passcode (arg or ?pwd=) is
+// only used to build the page URL.
+func (c *Checker) Check(ctx context.Context, u *url.URL, passcode string) checker.Verdict {
 	short := extractShort(u)
 	if short == "" {
 		return checker.Unknown(checker.ReasonUnparseable, "")
+	}
+	if passcode == "" {
+		passcode = u.Query().Get("pwd")
 	}
 	c.ensureCookie(ctx)
 
@@ -129,7 +132,55 @@ func (c *Checker) Check(ctx context.Context, u *url.URL, _ string) checker.Verdi
 		// Anti-bot HTML / redirect page instead of JSON — never Dead.
 		return checker.Unknown(checker.ReasonUnparseable, "")
 	}
+	// shorturlinfo's -9 (passcode-protected) is ambiguous: a DELETED passcode
+	// share and a LIVE passcode share both return -9 (and Baidu even flips a dead
+	// share between -9 and -21 over time). Resolve it with the share page, which
+	// renders a server-side (non-SPA) sentinel either way. See docs/PROVIDERS.md.
+	if info.Errno != nil && *info.Errno == -9 {
+		return c.pageVerdict(ctx, short, passcode)
+	}
 	return c.mapErrno(info)
+}
+
+// pageVerdict resolves the ambiguous -9 case by reading the share page. Both
+// sentinels are server-rendered and mutually exclusive (verified across dead and
+// live passcode shares), so this yields neither false-dead nor false-alive; any
+// other page stays unknown.
+func (c *Checker) pageVerdict(ctx context.Context, short, passcode string) checker.Verdict {
+	pageURL := c.apiBase + "/s/" + short
+	if passcode != "" {
+		pageURL += "?pwd=" + url.QueryEscape(passcode)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return checker.Unknown(checker.ReasonPasscodeRequired, "-9")
+	}
+	req.Header.Set("User-Agent", c.userAgent)
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
+			return checker.Unknown(checker.ReasonTimeout, "-9")
+		}
+		return checker.Unknown(checker.ReasonNetworkError, "-9")
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 512<<10))
+	if err != nil {
+		return checker.Unknown(checker.ReasonPasscodeRequired, "-9")
+	}
+	body := string(raw)
+	switch {
+	case strings.Contains(body, "链接不存在"):
+		return checker.Dead(checker.ReasonShareNotFound, "-9/page")
+	case strings.Contains(body, "请输入提取码"):
+		// The passcode-entry page renders => the share exists (locked). Per the
+		// project decision, existing-but-locked is alive.
+		return checker.Alive(checker.ReasonShareOK, "-9/page")
+	default:
+		return checker.Unknown(checker.ReasonPasscodeRequired, "-9")
+	}
 }
 
 func (c *Checker) mapErrno(info shortURLInfo) checker.Verdict {

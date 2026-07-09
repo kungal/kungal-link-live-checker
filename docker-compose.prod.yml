@@ -9,6 +9,7 @@ name: kungal-link-live-checker
 services:
   link-checker:                                   # globally-unique name on dokploy-network
     image: ghcr.io/kungal/kungal-link-live-checker:latest
+    pull_policy: always                           # re-pull :latest every deploy (else Dokploy reuses the cached image)
     environment:
       LLC_ADDR: ":6734"
       # s2s API keys, comma-separated, one per consumer. SECRET — set in the

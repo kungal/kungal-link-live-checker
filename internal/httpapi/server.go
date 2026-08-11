@@ -1,4 +1,3 @@
-// Package httpapi exposes the conservative link checker over HTTP with s2s auth.
 package httpapi
 
 import (
@@ -12,12 +11,10 @@ import (
 	"github.com/KunMoe/kungal-link-live-checker/internal/checker"
 )
 
-// CheckService is the behavior the HTTP layer needs from the core service.
 type CheckService interface {
 	Check(ctx context.Context, url, passcode string) checker.Result
 }
 
-// Server adapts a CheckService to HTTP handlers.
 type Server struct {
 	svc      CheckService
 	auth     *authenticator
@@ -25,7 +22,6 @@ type Server struct {
 	log      *slog.Logger
 }
 
-// NewServer builds the HTTP server façade.
 func NewServer(svc CheckService, apiKeys []string, batchMax int, log *slog.Logger) *Server {
 	return &Server{
 		svc:      svc,
@@ -35,8 +31,6 @@ func NewServer(svc CheckService, apiKeys []string, batchMax int, log *slog.Logge
 	}
 }
 
-// Handler returns the routed http.Handler. /healthz is unauthenticated; all
-// /v1 endpoints require a valid Bearer key.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)

@@ -18,8 +18,6 @@ func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// newChecker spins an httptest server that always replies with the given HTTP
-// status + body, and returns a Checker pointed at it.
 func newChecker(t *testing.T, blockedAsDead bool, status int, body string) *Checker {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -122,7 +120,6 @@ func TestCheckCodeMapping(t *testing.T) {
 			wantStatus:    checker.StatusUnknown, wantReason: checker.ReasonShareBlocked, wantCode: "41010",
 		},
 		{
-			// API drift guard: a never-before-seen code must stay unknown.
 			name:       "unrecognized code -> unknown, never dead",
 			httpStatus: 200,
 			body:       `{"status":200,"code":99999,"message":"???"}`,
@@ -153,9 +150,6 @@ func TestCheckCodeMapping(t *testing.T) {
 	}
 }
 
-// TestNeverDeadOnAnyUnknownCode is a guard: across a wide sweep of codes, only
-// the verified gone/blocked codes may produce Dead. Anything else (including
-// codes the docs once merely *suspected*, like 41027) must stay non-dead.
 func TestNeverDeadOnAnyUnknownCode(t *testing.T) {
 	deadAllowed := map[int]bool{41004: true, 41006: true, 41011: true, 41012: true, 41010: true, 41031: true}
 	for _, code := range []int{-1, 1, 105, 116, 41027, 41008, 41099, 50000, 99999} {
@@ -178,7 +172,6 @@ func TestPasscodeFromURLQuery(t *testing.T) {
 	t.Cleanup(srv.Close)
 	c := New(Config{Name: "quark", Hosts: []string{"pan.quark.cn"}, TokenURL: srv.URL, Client: srv.Client(), Logger: quietLogger()})
 
-	// passcode arg empty, but URL carries ?pwd=wdwV
 	c.Check(context.Background(), mustURL(t, "https://pan.quark.cn/s/abc?pwd=wdwV"), "")
 	if want := `"passcode":"wdwV"`; !strings.Contains(gotBody, want) {
 		t.Fatalf("request body %q does not carry %q", gotBody, want)
@@ -196,7 +189,6 @@ func TestMatchesAndUnparseableURL(t *testing.T) {
 	if c.Matches(mustURL(t, "https://pan.baidu.com/s/abc")) {
 		t.Fatal("should not match baidu")
 	}
-	// No /s/<id> segment -> can't parse share id -> unknown, no network call.
 	got := c.Check(context.Background(), mustURL(t, "https://pan.quark.cn/list/all"), "")
 	if got.Status != checker.StatusUnknown || got.Reason != checker.ReasonUnparseable {
 		t.Fatalf("got %+v, want unknown/unparseable", got)

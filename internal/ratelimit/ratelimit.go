@@ -1,6 +1,3 @@
-// Package ratelimit provides a minimal token-bucket limiter, one per provider,
-// so the service never floods a netdisk and gets the egress IP blocked
-// (docs/REQUIREMENTS.md §7). Stdlib-only, no external deps.
 package ratelimit
 
 import (
@@ -9,36 +6,34 @@ import (
 	"time"
 )
 
-// Limiter is a token bucket refilled at a steady rate.
 type Limiter struct {
 	clock func() time.Time
 
-	mu       sync.Mutex
-	tokens   float64
-	capacity float64
-	refill   float64 // tokens per second
-	last     time.Time
+	mu           sync.Mutex
+	tokens       float64
+	capacity     float64
+	refillPerSec float64
+	last         time.Time
 }
 
-// NewLimiter builds a limiter allowing rps tokens/second with the given burst
-// capacity. rps <= 0 disables limiting (every request allowed immediately).
+// rps <= 0 disables limiting.
 func NewLimiter(rps float64, burst int) *Limiter {
 	capacity := float64(burst)
 	if capacity < 1 {
 		capacity = 1
 	}
 	l := &Limiter{
-		clock:    time.Now,
-		tokens:   capacity,
-		capacity: capacity,
-		refill:   rps,
+		clock:        time.Now,
+		tokens:       capacity,
+		capacity:     capacity,
+		refillPerSec: rps,
 	}
 	l.last = l.clock()
 	return l
 }
 
 func (l *Limiter) refillLocked(now time.Time) {
-	if l.refill <= 0 { // disabled: always full
+	if l.refillPerSec <= 0 {
 		l.tokens = l.capacity
 		l.last = now
 		return
@@ -47,14 +42,13 @@ func (l *Limiter) refillLocked(now time.Time) {
 	if elapsed <= 0 {
 		return
 	}
-	l.tokens += elapsed * l.refill
+	l.tokens += elapsed * l.refillPerSec
 	if l.tokens > l.capacity {
 		l.tokens = l.capacity
 	}
 	l.last = now
 }
 
-// Allow consumes a token without blocking, reporting whether one was available.
 func (l *Limiter) Allow() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -66,7 +60,6 @@ func (l *Limiter) Allow() bool {
 	return false
 }
 
-// Wait blocks until a token is available or ctx is done.
 func (l *Limiter) Wait(ctx context.Context) error {
 	for {
 		l.mu.Lock()
@@ -77,8 +70,8 @@ func (l *Limiter) Wait(ctx context.Context) error {
 			return nil
 		}
 		var wait time.Duration
-		if l.refill > 0 {
-			wait = time.Duration((1 - l.tokens) / l.refill * float64(time.Second))
+		if l.refillPerSec > 0 {
+			wait = time.Duration((1 - l.tokens) / l.refillPerSec * float64(time.Second))
 		}
 		l.mu.Unlock()
 		if wait <= 0 {
@@ -94,7 +87,6 @@ func (l *Limiter) Wait(ctx context.Context) error {
 	}
 }
 
-// Registry hands out one Limiter per provider name, created lazily.
 type Registry struct {
 	mu       sync.Mutex
 	limiters map[string]*Limiter
@@ -102,12 +94,10 @@ type Registry struct {
 	burst    int
 }
 
-// NewRegistry returns a registry whose limiters share the given rps/burst.
 func NewRegistry(rps float64, burst int) *Registry {
 	return &Registry{limiters: make(map[string]*Limiter), rps: rps, burst: burst}
 }
 
-// For returns the limiter for a provider, creating it on first use.
 func (r *Registry) For(name string) *Limiter {
 	r.mu.Lock()
 	defer r.mu.Unlock()

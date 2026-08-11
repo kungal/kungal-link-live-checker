@@ -100,7 +100,7 @@ func TestBatchRespectsMax(t *testing.T) {
 
 func TestNoKeysConfiguredRejectsAll(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := NewServer(&stubService{}, nil, 50, log).Handler() // no keys -> fail closed
+	h := NewServer(&stubService{}, nil, 50, log).Handler()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/check", strings.NewReader(`{"url":"x"}`))
 	req.Header.Set("Authorization", "Bearer anything")

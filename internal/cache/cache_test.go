@@ -15,7 +15,7 @@ func TestGetSetAndExpiry(t *testing.T) {
 		t.Fatalf("got (%q,%v), want (v,true)", v, ok)
 	}
 
-	now = now.Add(2 * time.Minute) // past expiry
+	now = now.Add(2 * time.Minute)
 	if _, ok := c.Get("k"); ok {
 		t.Fatal("entry should have expired")
 	}

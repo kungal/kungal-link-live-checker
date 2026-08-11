@@ -57,7 +57,6 @@ func TestCodeMapping(t *testing.T) {
 	}
 }
 
-// IRON LAW: only the verified 200000727 may yield Dead.
 func TestNeverDeadExceptGone(t *testing.T) {
 	for _, code := range []string{"0", "9188", "1", "9999", "200000001", "-1"} {
 		c := newChecker(t, code, "x")

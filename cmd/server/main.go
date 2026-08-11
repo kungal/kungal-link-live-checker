@@ -1,4 +1,3 @@
-// Command server runs the kungal-link-live-checker HTTP service.
 package main
 
 import (
@@ -28,8 +27,6 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// `<bin> healthcheck` probes /healthz and exits — used by container
-	// HEALTHCHECK (distroless has no curl). No-op for the normal server start.
 	health.MaybeProbe(cfg.Addr, "/healthz")
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))

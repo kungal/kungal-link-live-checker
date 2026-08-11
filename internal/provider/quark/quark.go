@@ -1,5 +1,3 @@
-// Package quark is the Quark netdisk (pan.quark.cn) checker. Its status API and
-// code mapping are verified against production (docs/PROVIDERS.md, 2026-06-13).
 package quark
 
 import (
@@ -9,14 +7,12 @@ import (
 	"github.com/KunMoe/kungal-link-live-checker/internal/provider/quarkfamily"
 )
 
-// Options tunes the Quark checker.
 type Options struct {
 	Client        *http.Client
 	Logger        *slog.Logger
 	BlockedAsDead bool
 }
 
-// New builds the verified Quark checker.
 func New(opts Options) *quarkfamily.Checker {
 	return quarkfamily.New(quarkfamily.Config{
 		Name:          "quark",

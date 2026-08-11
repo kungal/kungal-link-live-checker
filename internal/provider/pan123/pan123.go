@@ -1,12 +1,3 @@
-// Package pan123 is the 123pan (123云盘, 123pan.com and mirror domains) checker.
-// Each mirror (123pan.com / 123912 / 123684 / 123865 / 123pan.cn) is a separate
-// deployment, so the share/get API is called on the SAME host as the link. The
-// API is reachable without login. Verified against real shares from the kungal
-// forum DB on 2026-06-13 (docs/PROVIDERS.md).
-//
-// Trap (verified): code 5103 is overloaded — it means BOTH "此分享不存在" (dead)
-// and "提取码错误" (exists but passcode-locked). The message disambiguates;
-// mapping 5103 to dead unconditionally would误杀 every passcode-locked share.
 package pan123
 
 import (
@@ -26,21 +17,18 @@ import (
 
 const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-// Options tunes the 123pan checker.
 type Options struct {
 	Client    *http.Client
 	UserAgent string
 	Logger    *slog.Logger
 }
 
-// Checker probes 123pan shares via the share/get API on the link's own host.
 type Checker struct {
 	client    *http.Client
 	userAgent string
 	logger    *slog.Logger
 }
 
-// New builds the 123pan checker.
 func New(opts Options) *Checker {
 	c := &Checker{client: opts.Client, userAgent: opts.UserAgent, logger: opts.Logger}
 	if c.client == nil {
@@ -79,8 +67,6 @@ type response struct {
 	Message string `json:"message"`
 }
 
-// Check probes the share. A passcode (arg or ?pwd=) is forwarded as SharePwd so
-// a correct code upgrades a locked share to code 0.
 func (c *Checker) Check(ctx context.Context, u *url.URL, passcode string) checker.Verdict {
 	key := extractKey(u)
 	if key == "" {
@@ -100,6 +86,9 @@ func (c *Checker) Check(ctx context.Context, u *url.URL, passcode string) checke
 		"parentFileId":   {"0"},
 		"Page":           {"1"},
 	}
+	// Each mirror domain is its own deployment, so the API must be called on the
+	// same host as the share link; a fixed 123pan.com base returns "not found"
+	// for perfectly live 123912/123684 shares.
 	api := "https://" + u.Host + "/b/api/share/get?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
 	if err != nil {
@@ -137,8 +126,9 @@ func (c *Checker) mapCode(r response) checker.Verdict {
 	case 0:
 		return checker.Alive(checker.ReasonShareOK, code)
 	case 5103:
-		// Overloaded: disambiguate by message. Only an explicit "不存在" is dead;
-		// "提取码错误" means the share exists but is locked -> alive (per decision).
+		// 5103 is two different answers: "此分享不存在" and "提取码错误". Only the
+		// message separates them, so mapping the code straight to dead kills
+		// every passcode-locked share that is still perfectly alive.
 		switch {
 		case strings.Contains(r.Message, "不存在"):
 			return checker.Dead(checker.ReasonShareNotFound, code)

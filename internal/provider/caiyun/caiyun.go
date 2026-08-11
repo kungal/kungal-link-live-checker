@@ -1,7 +1,3 @@
-// Package caiyun is the China Mobile Cloud (和彩云, caiyun.139.com) checker. It
-// calls the getOutLinkInfoV6 share API, which is reachable in plaintext without
-// login, and maps its code to the conservative three-state. Verified against
-// real shares from the kungal forum DB on 2026-06-13 (docs/PROVIDERS.md).
 package caiyun
 
 import (
@@ -25,15 +21,13 @@ const (
 	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-// Options tunes the caiyun checker.
 type Options struct {
 	Client    *http.Client
-	APIURL    string // override for tests
+	APIURL    string
 	UserAgent string
 	Logger    *slog.Logger
 }
 
-// Checker probes caiyun shares via getOutLinkInfoV6.
 type Checker struct {
 	client    *http.Client
 	apiURL    string
@@ -41,7 +35,6 @@ type Checker struct {
 	logger    *slog.Logger
 }
 
-// New builds the caiyun checker.
 func New(opts Options) *Checker {
 	c := &Checker{
 		client:    opts.Client,
@@ -74,10 +67,6 @@ func (c *Checker) Matches(u *url.URL) bool {
 
 var linkIDRe = regexp.MustCompile(`linkID=([A-Za-z0-9_-]+)`)
 
-// extractLinkID handles the two share-URL shapes:
-//
-//	caiyun.139.com/m/i?<linkID>              (bare query)
-//	caiyun.139.com/front/#/detail?linkID=<linkID>  (in the SPA fragment)
 func extractLinkID(u *url.URL) string {
 	if v := u.Query().Get("linkID"); v != "" {
 		return v
@@ -99,9 +88,6 @@ type response struct {
 	Desc string `json:"desc"`
 }
 
-// Check probes the share. caiyun's plaintext API does not take the passcode in
-// a field we have verified, so passcode is unused; a passcode-locked but extant
-// share already resolves to alive via code 9188.
 func (c *Checker) Check(ctx context.Context, u *url.URL, _ string) checker.Verdict {
 	linkID := extractLinkID(u)
 	if linkID == "" {
@@ -144,11 +130,10 @@ func (c *Checker) mapCode(r response) checker.Verdict {
 	case "0":
 		return checker.Alive(checker.ReasonShareOK, r.Code)
 	case "9188":
-		// 提取码非法 — the share exists but is passcode-locked. Per project
-		// decision an existing-but-locked share is alive (the link is not dead).
+		// 提取码非法. The share exists and only the passcode was rejected, so this
+		// is alive; reading it as an error and returning dead kills live links.
 		return checker.Alive(checker.ReasonShareOK, r.Code)
 	case "200000727":
-		// 外链不存在 / 外链被分享者取消
 		return checker.Dead(checker.ReasonShareNotFound, r.Code)
 	default:
 		c.logger.Warn("unrecognized caiyun code; treating as unknown (possible API drift)",

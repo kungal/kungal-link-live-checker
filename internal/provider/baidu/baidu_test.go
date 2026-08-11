@@ -16,9 +16,6 @@ import (
 
 func quietLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-// serve returns a handler that warms a BAIDUID cookie on "/", replies to
-// shorturlinfo with the given errno, and serves the given body for the /s/ page
-// (used to resolve the ambiguous -9 case).
 func serve(errno int, page string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -79,8 +76,6 @@ func TestErrnoAndPageMapping(t *testing.T) {
 	}
 }
 
-// IRON LAW: with a non-dead page, no errno may yield Dead except the verified
-// -21. (A -9 whose page says 链接不存在 is separately covered above.)
 func TestNeverDeadWithoutDeadSignal(t *testing.T) {
 	const nonDeadPage = `<title>百度网盘 请输入提取码</title>`
 	for _, errno := range []int{0, -9, -1, -7, -8, 2, 140, -55, -12, 105, 116} {
@@ -107,14 +102,13 @@ func TestNonJSONBodyIsUnknown(t *testing.T) {
 	}
 }
 
-// A JSON envelope with no errno field must NOT default to alive (errno 0).
 func TestMissingErrnoIsUnknown(t *testing.T) {
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":
 			http.SetCookie(w, &http.Cookie{Name: "BAIDUID", Value: "t"})
 		default:
-			_, _ = io.WriteString(w, `{"shareid":123,"uk":456}`) // no errno
+			_, _ = io.WriteString(w, `{"shareid":123,"uk":456}`)
 		}
 	})
 	c := newChecker(t, h)

@@ -1,6 +1,3 @@
-// Package config loads service configuration from environment variables.
-// Secrets (s2s API keys, proxy creds) come from the environment only and are
-// never committed (see .gitignore).
 package config
 
 import (
@@ -10,7 +7,6 @@ import (
 	"time"
 )
 
-// Config is the fully-resolved runtime configuration.
 type Config struct {
 	Addr         string
 	APIKeys      []string
@@ -24,26 +20,17 @@ type Config struct {
 	RateRPS   float64
 	RateBurst int
 
-	// QuarkBlockedAsDead controls whether a "share blocked" signal (Quark
-	// 41031) maps to dead (default) or is downgraded to unknown. See
-	// REQUIREMENTS §3.3 / §10 open question #1.
 	QuarkBlockedAsDead bool
 
-	// UC is homologous to Quark and verified (docs/PROVIDERS.md); on by default.
 	UCEnabled  bool
 	UCTokenURL string
 
-	// Baidu uses the shorturlinfo API (verified, docs/PROVIDERS.md); on by
-	// default. Anti-crawl is aggressive — consider a lower LLC_RATE_RPS.
 	BaiduEnabled bool
 
-	// Caiyun (和彩云) and 123pan are verified (docs/PROVIDERS.md); on by default.
-	// Xunlei needs device-id + captcha + login and is not implemented yet.
 	CaiyunEnabled bool
 	Pan123Enabled bool
 }
 
-// Load reads configuration from the environment, applying defaults.
 func Load() Config {
 	return Config{
 		Addr:               env("LLC_ADDR", ":6734"),

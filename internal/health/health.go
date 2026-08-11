@@ -1,9 +1,3 @@
-// Package health implements the `healthcheck` subcommand used by the container
-// HEALTHCHECK directive. distroless runtime images ship no shell, curl or wget,
-// so the service binary probes its own /healthz endpoint and exits 0 (healthy)
-// / 1 (unhealthy):
-//
-//	HEALTHCHECK CMD ["/app", "healthcheck"]
 package health
 
 import (
@@ -14,12 +8,8 @@ import (
 	"time"
 )
 
-// MaybeProbe runs the healthcheck probe and exits the process, or returns
-// immediately when the binary was not invoked as `<bin> healthcheck`. It is a
-// no-op unless os.Args[1] == "healthcheck", so it is safe to call at the very
-// top of main() — it only needs the already-running HTTP server, not any of its
-// dependencies. addr is the server listen address (e.g. ":6734"); path is the
-// unauthenticated health endpoint.
+// The distroless runtime image ships no shell, curl or wget, so the container
+// HEALTHCHECK runs the service binary against its own /healthz.
 func MaybeProbe(addr, path string) {
 	if len(os.Args) < 2 || os.Args[1] != "healthcheck" {
 		return

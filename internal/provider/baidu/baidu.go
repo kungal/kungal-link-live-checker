@@ -1,8 +1,3 @@
-// Package baidu is the Baidu netdisk (pan.baidu.com) checker. Baidu 302-redirects
-// cookieless requests, so the checker first warms up a BAIDUID cookie, then calls
-// the public shorturlinfo JSON API (no login required) and maps its errno to the
-// conservative three-state. Verified against real shares from the kungal forum DB
-// on 2026-06-13 (docs/PROVIDERS.md).
 package baidu
 
 import (
@@ -26,17 +21,13 @@ const (
 	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-// Options tunes the Baidu checker.
 type Options struct {
-	Client    *http.Client // shared client; its Transport/Timeout are reused
-	APIBase   string       // override for tests; defaults to https://pan.baidu.com
+	Client    *http.Client
+	APIBase   string
 	UserAgent string
 	Logger    *slog.Logger
 }
 
-// Checker probes Baidu shares via shorturlinfo. It owns a cookie jar (Baidu
-// needs a BAIDUID cookie) so it uses a dedicated client wrapping the shared
-// transport.
 type Checker struct {
 	client    *http.Client
 	apiBase   string
@@ -44,7 +35,8 @@ type Checker struct {
 	logger    *slog.Logger
 }
 
-// New builds the Baidu checker.
+// The shared client is rewrapped with a private cookie jar: without a BAIDUID
+// cookie, shorturlinfo 302s to an anti-bot page instead of returning JSON.
 func New(opts Options) *Checker {
 	base := opts.Client
 	if base == nil {
@@ -77,7 +69,6 @@ func (c *Checker) Matches(u *url.URL) bool {
 	return strings.EqualFold(u.Hostname(), "pan.baidu.com")
 }
 
-// shortRe captures the share short-url, e.g. /s/1AbC… → 1AbC…
 var shortRe = regexp.MustCompile(`/s/(1[A-Za-z0-9_-]+)`)
 
 func extractShort(u *url.URL) string {
@@ -89,13 +80,12 @@ func extractShort(u *url.URL) string {
 }
 
 type shortURLInfo struct {
-	Errno   *int   `json:"errno"` // pointer: a missing errno must NOT default to 0/alive
+	// A pointer, because an anti-bot envelope carries no errno at all and a
+	// plain int would decode that as 0, which this checker reads as alive.
+	Errno   *int   `json:"errno"`
 	ShowMsg string `json:"show_msg"`
 }
 
-// Check probes the share via shorturlinfo, then resolves the ambiguous -9
-// (passcode-protected) case with the share page. The passcode (arg or ?pwd=) is
-// only used to build the page URL.
 func (c *Checker) Check(ctx context.Context, u *url.URL, passcode string) checker.Verdict {
 	short := extractShort(u)
 	if short == "" {
@@ -129,23 +119,20 @@ func (c *Checker) Check(ctx context.Context, u *url.URL, passcode string) checke
 	}
 	var info shortURLInfo
 	if err := json.Unmarshal(raw, &info); err != nil {
-		// Anti-bot HTML / redirect page instead of JSON — never Dead.
 		return checker.Unknown(checker.ReasonUnparseable, "")
 	}
-	// shorturlinfo's -9 (passcode-protected) is ambiguous: a DELETED passcode
-	// share and a LIVE passcode share both return -9 (and Baidu even flips a dead
-	// share between -9 and -21 over time). Resolve it with the share page, which
-	// renders a server-side (non-SPA) sentinel either way. See docs/PROVIDERS.md.
+	// errno -9 was first read as "locked, therefore alive". It is not: a deleted
+	// passcode share and a live passcode share both return -9, and one dead link
+	// was observed flipping between -9 and -21 across probes. Shipping -9 as
+	// alive passed dead links through the report gate as false reports.
 	if info.Errno != nil && *info.Errno == -9 {
 		return c.pageVerdict(ctx, short, passcode)
 	}
 	return c.mapErrno(info)
 }
 
-// pageVerdict resolves the ambiguous -9 case by reading the share page. Both
-// sentinels are server-rendered and mutually exclusive (verified across dead and
-// live passcode shares), so this yields neither false-dead nor false-alive; any
-// other page stays unknown.
+// The share page is server-rendered, so its two sentinels survive where the API
+// is ambiguous. Neither sentinel present stays unknown.
 func (c *Checker) pageVerdict(ctx context.Context, short, passcode string) checker.Verdict {
 	pageURL := c.apiBase + "/s/" + short
 	if passcode != "" {
@@ -175,8 +162,6 @@ func (c *Checker) pageVerdict(ctx context.Context, short, passcode string) check
 	case strings.Contains(body, "链接不存在"):
 		return checker.Dead(checker.ReasonShareNotFound, "-9/page")
 	case strings.Contains(body, "请输入提取码"):
-		// The passcode-entry page renders => the share exists (locked). Per the
-		// project decision, existing-but-locked is alive.
 		return checker.Alive(checker.ReasonShareOK, "-9/page")
 	default:
 		return checker.Unknown(checker.ReasonPasscodeRequired, "-9")
@@ -185,37 +170,24 @@ func (c *Checker) pageVerdict(ctx context.Context, short, passcode string) check
 
 func (c *Checker) mapErrno(info shortURLInfo) checker.Verdict {
 	if info.Errno == nil {
-		// Valid JSON but no errno field — an anti-bot / changed-API envelope.
-		// Never Alive on a missing code.
 		return checker.Unknown(checker.ReasonUnparseable, "")
 	}
 	errno := *info.Errno
 	code := strconv.Itoa(errno)
 	switch errno {
 	case 0:
-		// Public share, no passcode — confirmed accessible.
 		return checker.Alive(checker.ReasonShareOK, code)
 	case -9:
-		// Passcode-protected. shorturlinfo will NOT reveal the real state without
-		// the passcode and returns -9 for dead-locked shares too (a known-dead
-		// link was observed returning -9, then -21). So -9 confirms nothing —
-		// Unknown, not Alive. Unlike caiyun/123pan, Baidu has no distinct
-		// "not found" message at this layer to separate dead-locked from
-		// alive-locked. See docs/PROVIDERS.md.
 		return checker.Unknown(checker.ReasonPasscodeRequired, code)
 	case -21:
-		// Verified: the share page renders "百度网盘-链接不存在" — gone.
 		return checker.Dead(checker.ReasonShareNotFound, code)
 	default:
-		// errno 140 (malformed link) and anything else: not a verified signal.
 		c.logger.Warn("unrecognized baidu errno; treating as unknown (possible anti-crawl or API drift)",
 			"errno", errno, "show_msg", info.ShowMsg)
 		return checker.Unknown(checker.ReasonUnparseable, code)
 	}
 }
 
-// ensureCookie warms up a BAIDUID cookie if the jar lacks one. Baidu sets it on
-// any homepage hit; without it shorturlinfo 302s to an anti-bot page.
 func (c *Checker) ensureCookie(ctx context.Context) {
 	base, err := url.Parse(c.apiBase)
 	if err != nil {

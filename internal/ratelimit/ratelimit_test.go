@@ -7,7 +7,7 @@ import (
 )
 
 func TestAllowBurstThenRefill(t *testing.T) {
-	l := NewLimiter(1, 2) // 1 token/s, burst 2
+	l := NewLimiter(1, 2)
 	now := time.Unix(0, 0)
 	l.clock = func() time.Time { return now }
 	l.last = now
@@ -23,14 +23,14 @@ func TestAllowBurstThenRefill(t *testing.T) {
 		t.Fatal("third immediate request should be denied")
 	}
 
-	now = now.Add(time.Second) // one token refilled
+	now = now.Add(time.Second)
 	if !l.Allow() {
 		t.Fatal("after 1s a token should be available")
 	}
 }
 
 func TestDisabledLimiterAlwaysAllows(t *testing.T) {
-	l := NewLimiter(0, 1) // rps <= 0 disables limiting
+	l := NewLimiter(0, 1)
 	for i := range 100 {
 		if !l.Allow() {
 			t.Fatalf("disabled limiter denied at i=%d", i)
@@ -39,11 +39,11 @@ func TestDisabledLimiterAlwaysAllows(t *testing.T) {
 }
 
 func TestWaitRespectsContext(t *testing.T) {
-	l := NewLimiter(0.001, 1) // very slow refill
-	l.tokens = 0              // force a wait
+	l := NewLimiter(0.001, 1)
+	l.tokens = 0
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // already done
+	cancel()
 	if err := l.Wait(ctx); err == nil {
 		t.Fatal("Wait should return the context error when ctx is done")
 	}

@@ -24,9 +24,6 @@ func mustURL(t *testing.T, raw string) *url.URL {
 	return u
 }
 
-// newChecker returns a checker plus the test server base URL (https). The
-// checker derives the API host from the share URL, so the share URL must point
-// at the test server.
 func newChecker(t *testing.T, h http.Handler) (*Checker, string) {
 	t.Helper()
 	srv := httptest.NewTLSServer(h)
@@ -69,7 +66,6 @@ func TestCodeMapping(t *testing.T) {
 	}
 }
 
-// IRON LAW: the only path to Dead is 5103 with an explicit "不存在" message.
 func TestNeverDeadUnlessNotFound(t *testing.T) {
 	type tc struct {
 		code int
@@ -90,7 +86,6 @@ func TestPasscodeForwarded(t *testing.T) {
 		gotPwd = r.URL.Query().Get("SharePwd")
 		fmt.Fprint(w, `{"code":0,"message":"ok"}`)
 	}))
-	// passcode in URL ?pwd= should be forwarded as SharePwd
 	c.Check(context.Background(), mustURL(t, base+"/s/abc?pwd=love"), "")
 	if gotPwd != "love" {
 		t.Fatalf("SharePwd = %q, want love", gotPwd)

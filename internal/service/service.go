@@ -1,6 +1,3 @@
-// Package service orchestrates a link check: provider dispatch, caching, and
-// per-provider rate limiting around the conservative Checker verdict. It carries
-// no downstream business logic (no failure counts / notifications / thresholds).
 package service
 
 import (
@@ -15,7 +12,6 @@ import (
 	"github.com/KunMoe/kungal-link-live-checker/internal/ratelimit"
 )
 
-// Options configures cache TTLs and the per-check timeout.
 type Options struct {
 	CheckTimeout time.Duration
 	TTLAlive     time.Duration
@@ -23,7 +19,6 @@ type Options struct {
 	TTLUnknown   time.Duration
 }
 
-// cached is the cache value; mirrors a Result minus the Cached flag.
 type cached struct {
 	provider     string
 	status       checker.Status
@@ -32,7 +27,6 @@ type cached struct {
 	checkedAt    time.Time
 }
 
-// Service resolves a URL to a conservative Result.
 type Service struct {
 	registry *checker.Registry
 	cache    *cache.Cache[cached]
@@ -40,11 +34,9 @@ type Service struct {
 	opts     Options
 	log      *slog.Logger
 
-	// Clock is overridable in tests; defaults to time.Now.
 	Clock func() time.Time
 }
 
-// New wires a Service. It owns an internal cache.
 func New(reg *checker.Registry, lim *ratelimit.Registry, opts Options, log *slog.Logger) *Service {
 	return &Service{
 		registry: reg,
@@ -56,7 +48,6 @@ func New(reg *checker.Registry, lim *ratelimit.Registry, opts Options, log *slog
 	}
 }
 
-// RunJanitor evicts expired cache entries until ctx is done.
 func (s *Service) RunJanitor(ctx context.Context, interval time.Duration) {
 	s.cache.Janitor(ctx, interval)
 }
@@ -68,7 +59,6 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
-// Check resolves rawURL (with an optional passcode) to a conservative Result.
 func (s *Service) Check(ctx context.Context, rawURL, passcode string) checker.Result {
 	start := s.now()
 
@@ -96,7 +86,6 @@ func (s *Service) Check(ctx context.Context, rawURL, passcode string) checker.Re
 	defer cancel()
 
 	if err := s.limiters.For(ck.Name()).Wait(cctx); err != nil {
-		// The per-check deadline cut off the wait before a token was free.
 		return s.result(ck.Name(), checker.Unknown(checker.ReasonTimeout, ""))
 	}
 
@@ -134,15 +123,10 @@ func (s *Service) ttlFor(st checker.Status) time.Duration {
 	}
 }
 
-// cacheKey is the normalized URL plus whether a passcode was supplied
-// (REQUIREMENTS §5). Unknown verdicts are short-/un-cached, so a wrong-passcode
-// miss never poisons a later correct-passcode lookup.
-//
-// The share id lives in different places per provider: the path
-// (quark/baidu/123pan), the query (caiyun /m/i?<id>), or the fragment
-// (caiyun front/#/detail?linkID=<id>). All three are folded in so distinct
-// shares never collide on one key. The pwd param is dropped — passcode presence
-// is tracked separately by the pc flag.
+// Not every provider puts the share id in the path. caiyun uses the bare query
+// (/m/i?<id>) and the SPA fragment (front/#/detail?linkID=<id>), so a key built
+// from host+path alone collapses every caiyun share onto one entry and serves
+// one share's verdict for another.
 func cacheKey(u *url.URL, passcode string) string {
 	host := strings.ToLower(u.Hostname())
 	path := strings.TrimRight(u.Path, "/")

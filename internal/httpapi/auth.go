@@ -7,14 +7,13 @@ import (
 	"strings"
 )
 
-// authenticator enforces s2s auth: a Bearer token must match one of the
-// configured API keys. Fails closed — with no keys configured, every /v1
-// request is rejected (the service is never anonymously open).
 type authenticator struct {
 	keys [][]byte
 	log  *slog.Logger
 }
 
+// No keys configured rejects every /v1 request. It must never degrade to open
+// access: an anonymous instance is a public netdisk-probing proxy.
 func newAuthenticator(keys []string, log *slog.Logger) *authenticator {
 	a := &authenticator{log: log}
 	for _, k := range keys {

@@ -48,6 +48,52 @@
 
 带提取码的正确姿势:`passcode` 用资源里存的提取码(或 URL 的 `?pwd=`)。先不带 → 若 `41008` 则带上重试 → 仍非 `0` 再按码判定。
 
+### ⚠️ `code:0` 不等于有效:必须再打 detail(2026-08-11 实测补充)
+
+**token 的 `code:0` 只证明提取码被接受,不证明还有东西可下。** 违规下架的分享照样返回 `code:0` + 合法 `stoken`。
+
+事故:`pan.quark.cn/s/2fce2f1d6d91`(提取码 `Tyi1`)被本服务判 `alive`,而浏览器输入提取码后显示"该分享已失效,不可访问"。
+
+第二步(取到 `stoken` 后):
+
+```
+GET https://drive-pc.quark.cn/1/clouddrive/share/sharepage/detail?pr=ucpro&fr=pc
+    &pwd_id=<pwd_id>&stoken=<stoken>&pdir_fid=0&_page=1&_size=1&_fetch_share=1
+Referer: https://pan.quark.cn/
+```
+
+`_size=1` 足够拿到 `data.share`(响应 ~3KB),不必拉整个文件列表。
+
+实测对照(4 条违规 + 8 条健康,论坛库真实链接):
+
+| pwd_id | `share.status` | `partial_violation` | `violation_cnt` | 根目录条目 | 下钻一层 | 真实状态 |
+|---|---|---|---|---|---|---|
+| `2fce2f1d6d91` | 1 | **true** | 1 | 1 | **0** | 已失效 |
+| `c9840931569a` | 1 | **true** | 3 | 1 | **0** | 已失效 |
+| `8fc80ea2bf28` | 1 | **true** | 2 | 1 | 1 | 部分违规 |
+| `a0a13a16fcf6` | 1 | **true** | 1 | 1 | 5 | 部分违规,仍列得出文件 |
+| 8 条健康链接 | 1 | false | 字段缺失 | 1 | 3–6 | 有效 |
+
+被排除的字段,别再走弯路:
+
+- **`audit_status` 不是信号**:健康链接也是 `4`,违规链接出现过 `1`。四个社区实现全都不用它。
+- **`share.status` 在本样本里恒为 `1`**,不区分。社区实现依赖的 `status>1` 分支在这里根本不触发。
+- **`partial_violation` 不可判 `dead`**:它同时覆盖"全空"和"删了几个、其余照常下载"两种情况,本层响应无法区分。
+
+映射(`LLC_QUARK_VERIFY_DETAIL=true`,默认开):
+
+| detail 响应 | 判定 | reason |
+|---|---|---|
+| `code:0` 且 `partial_violation` 缺失/为 false | `alive` | `share_ok` |
+| `code:0` 且 `partial_violation == true` | **`unknown`** | `share_blocked`(码 `0/partial_violation`) |
+| `code != 0` / 非 JSON / 网络错误 / 超时 | `unknown` | 对应 reason |
+
+**为什么是 `unknown` 而不是 `dead`**:`a0a13a16fcf6` 违规标记为真却仍列得出 5 个文件,判 `dead` 就是误杀。按铁律,分不清就是 `unknown`。代价是这部分链接失去"当场驳回误报"的能力;收益是随机 27 条抽样里 3 条(token-alive 的 12.5%)假 `alive` 被消除。关掉开关即回退到只看 token 的旧行为。
+
+**待定(§10 类,需仓库主人拍板)**:根目录只有单个文件夹时下钻一层,若为空且 `partial_violation` 则判 `dead`。能捞回上表前两条,但依据只有 n=2,且空文件夹分享是合法存在的,暂不实现。
+
+社区参考实现(判定逻辑收敛,但**都只查根目录**,对"单顶层文件夹"型分享会和我们最初一样误判 alive):[Lampon/PanCheck](https://github.com/Lampon/PanCheck)(Go)、[fish2018/pansou](https://github.com/fish2018/pansou)(Go)、[iflymeto/yuexin-search](https://github.com/iflymeto/yuexin-search)(PHP)、[WhiteSevs/TamperMonkeyScript](https://github.com/WhiteSevs/TamperMonkeyScript)(TS)。注意 pansou 会对 `message` 做关键词匹配("不存在/失效/违规")——**本项目不采纳**,文案随时会改,看不懂就得是 `unknown`。
+
 ---
 
 ## UC 网盘 uc(7.0%)✅ 已验证,夸克同源
@@ -64,6 +110,7 @@
 - 返回 envelope 与夸克**完全一致**(`{"status","code","message","data":{"stoken"}}`),**复用夸克那张状态码映射表**。无需登录 cookie 即可探测。
 - 实测来源:对论坛库 25 条最早 UC 分享逐条打上述端点(2026-06-13):`0`×17(alive)、`41008`×5(需提取码)、`41010`×2(文件涉及违规内容 → blocked/dead)、`41012`×1(好友已取消 → dead)。与夸克码族同源,确认无误。
 - 早先"用夸克参数直接打 `drive.uc.cn` 得 403 HTML"是**参数/host 没对**,不是失效信号;换到 `pc-api.uc.cn?pr=UCBrowser` + `Origin` 后即正常。
+- **detail 二次校验同样适用**(2026-08-11 实测):`GET https://pc-api.uc.cn/1/clouddrive/share/sharepage/detail?pr=UCBrowser&fr=pc`,参数与夸克一致,返回同一 schema(含 `partial_violation`)。6 条真实 UC 分享全部 `code:0` / `partial_violation:false`,与夸克共用上面那张 detail 映射表。端点可经 `LLC_UC_DETAIL_URL` 覆盖。
 
 ---
 

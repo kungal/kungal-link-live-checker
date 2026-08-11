@@ -42,11 +42,16 @@ func main() {
 	}
 
 	checkers := []checker.Checker{
-		quark.New(quark.Options{Client: httpClient, Logger: log, BlockedAsDead: cfg.QuarkBlockedAsDead}),
+		quark.New(quark.Options{
+			Client: httpClient, Logger: log,
+			BlockedAsDead: cfg.QuarkBlockedAsDead, VerifyDetail: cfg.QuarkVerifyDetail,
+		}),
 	}
 	if cfg.UCEnabled {
 		checkers = append(checkers, uc.New(uc.Options{
-			TokenURL: cfg.UCTokenURL, Client: httpClient, Logger: log, BlockedAsDead: cfg.QuarkBlockedAsDead,
+			TokenURL: cfg.UCTokenURL, DetailURL: cfg.UCDetailURL,
+			Client: httpClient, Logger: log,
+			BlockedAsDead: cfg.QuarkBlockedAsDead, VerifyDetail: cfg.QuarkVerifyDetail,
 		}))
 	}
 	if cfg.BaiduEnabled {

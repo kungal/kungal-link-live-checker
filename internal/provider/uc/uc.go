@@ -9,17 +9,24 @@ import (
 
 type Options struct {
 	TokenURL      string
+	DetailURL     string
 	Client        *http.Client
 	Logger        *slog.Logger
 	BlockedAsDead bool
+	VerifyDetail  bool
 }
 
 // UC rejects the token call without an Origin header; Quark does not need one.
 func New(opts Options) *quarkfamily.Checker {
+	detailURL := ""
+	if opts.VerifyDetail {
+		detailURL = opts.DetailURL
+	}
 	return quarkfamily.New(quarkfamily.Config{
 		Name:          "uc",
 		Hosts:         []string{"drive.uc.cn"},
 		TokenURL:      opts.TokenURL,
+		DetailURL:     detailURL,
 		Referer:       "https://drive.uc.cn/",
 		Origin:        "https://drive.uc.cn",
 		BlockedAsDead: opts.BlockedAsDead,

@@ -21,9 +21,11 @@ type Config struct {
 	RateBurst int
 
 	QuarkBlockedAsDead bool
+	QuarkVerifyDetail  bool
 
-	UCEnabled  bool
-	UCTokenURL string
+	UCEnabled   bool
+	UCTokenURL  string
+	UCDetailURL string
 
 	BaiduEnabled bool
 
@@ -43,8 +45,10 @@ func Load() Config {
 		RateRPS:            envFloat("LLC_RATE_RPS", 5),
 		RateBurst:          envInt("LLC_RATE_BURST", 5),
 		QuarkBlockedAsDead: envBool("LLC_QUARK_BLOCKED_AS_DEAD", true),
+		QuarkVerifyDetail:  envBool("LLC_QUARK_VERIFY_DETAIL", true),
 		UCEnabled:          envBool("LLC_UC_ENABLED", true),
 		UCTokenURL:         env("LLC_UC_TOKEN_URL", "https://pc-api.uc.cn/1/clouddrive/share/sharepage/token?pr=UCBrowser&fr=pc"),
+		UCDetailURL:        env("LLC_UC_DETAIL_URL", "https://pc-api.uc.cn/1/clouddrive/share/sharepage/detail?pr=UCBrowser&fr=pc"),
 		BaiduEnabled:       envBool("LLC_BAIDU_ENABLED", true),
 		CaiyunEnabled:      envBool("LLC_CAIYUN_ENABLED", true),
 		Pan123Enabled:      envBool("LLC_PAN123_ENABLED", true),

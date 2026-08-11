@@ -194,3 +194,114 @@ func TestMatchesAndUnparseableURL(t *testing.T) {
 		t.Fatalf("got %+v, want unknown/unparseable", got)
 	}
 }
+
+func newDetailChecker(t *testing.T, tokenBody string, detailStatus int, detailBody string) (*Checker, *url.Values) {
+	t.Helper()
+	var seen url.Values
+	mux := http.NewServeMux()
+	mux.HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, tokenBody)
+	})
+	mux.HandleFunc("/detail", func(w http.ResponseWriter, r *http.Request) {
+		seen = r.URL.Query()
+		w.WriteHeader(detailStatus)
+		_, _ = io.WriteString(w, detailBody)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	c := New(Config{
+		Name:     "quark",
+		Hosts:    []string{"pan.quark.cn"},
+		TokenURL: srv.URL + "/token",
+		// The real endpoint already carries ?pr=&fr=, so keep a query here too.
+		DetailURL: srv.URL + "/detail?pr=ucpro&fr=pc",
+		Client:    srv.Client(),
+		Logger:    quietLogger(),
+	})
+	return c, &seen
+}
+
+const okToken = `{"status":200,"code":0,"message":"ok","data":{"stoken":"ST123"}}`
+
+func TestDetailVerification(t *testing.T) {
+	cases := []struct {
+		name         string
+		detailStatus int
+		detailBody   string
+		wantStatus   checker.Status
+		wantReason   string
+	}{
+		{
+			name: "clean share stays alive", detailStatus: 200,
+			detailBody: `{"code":0,"data":{"share":{"status":1,"partial_violation":false}}}`,
+			wantStatus: checker.StatusAlive, wantReason: checker.ReasonShareOK,
+		},
+		{
+			name: "violation downgrades alive to unknown", detailStatus: 200,
+			detailBody: `{"code":0,"data":{"share":{"status":1,"partial_violation":true,"violation_cnt":1}}}`,
+			wantStatus: checker.StatusUnknown, wantReason: checker.ReasonShareBlocked,
+		},
+		{
+			name: "detail non-zero code -> unknown", detailStatus: 200,
+			detailBody: `{"code":31001,"message":"stoken invalid"}`,
+			wantStatus: checker.StatusUnknown, wantReason: checker.ReasonUnparseable,
+		},
+		{
+			name: "detail anti-bot html -> unknown", detailStatus: 200,
+			detailBody: `<!doctype html><html>captcha</html>`,
+			wantStatus: checker.StatusUnknown, wantReason: checker.ReasonUnparseable,
+		},
+		{
+			name: "detail missing share object -> alive (no violation flag)", detailStatus: 200,
+			detailBody: `{"code":0,"data":{}}`,
+			wantStatus: checker.StatusAlive, wantReason: checker.ReasonShareOK,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := newDetailChecker(t, okToken, tc.detailStatus, tc.detailBody)
+			got := c.Check(context.Background(), mustURL(t, "https://pan.quark.cn/s/2fce2f1d6d91"), "Tyi1")
+			if got.Status != tc.wantStatus || got.Reason != tc.wantReason {
+				t.Fatalf("got %+v, want {%s %s}", got, tc.wantStatus, tc.wantReason)
+			}
+		})
+	}
+}
+
+func TestDetailRequestCarriesTokenState(t *testing.T) {
+	c, seen := newDetailChecker(t, okToken, 200,
+		`{"code":0,"data":{"share":{"partial_violation":false}}}`)
+	c.Check(context.Background(), mustURL(t, "https://pan.quark.cn/s/2fce2f1d6d91"), "Tyi1")
+	for k, want := range map[string]string{"pwd_id": "2fce2f1d6d91", "stoken": "ST123", "pr": "ucpro", "fr": "pc"} {
+		if got := seen.Get(k); got != want {
+			t.Fatalf("detail query %s = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestDetailNeverProducesDead(t *testing.T) {
+	bodies := []string{
+		`{"code":0,"data":{"share":{"status":3,"partial_violation":true}}}`,
+		`{"code":0,"data":{"share":{"status":0,"partial_violation":true,"violation_cnt":99}}}`,
+		`{"code":41004,"message":"文件不存在"}`,
+		`{"code":0,"data":{"share":{},"list":[]}}`,
+		`{}`,
+		``,
+		`null`,
+	}
+	for _, body := range bodies {
+		c, _ := newDetailChecker(t, okToken, 200, body)
+		got := c.Check(context.Background(), mustURL(t, "https://pan.quark.cn/s/abc123"), "")
+		if got.Status == checker.StatusDead {
+			t.Fatalf("detail body %q produced Dead; the detail step may never kill a link", body)
+		}
+	}
+}
+
+func TestDetailSkippedWhenNotConfigured(t *testing.T) {
+	c := newChecker(t, true, 200, okToken)
+	got := c.Check(context.Background(), mustURL(t, "https://pan.quark.cn/s/abc"), "")
+	if got.Status != checker.StatusAlive {
+		t.Fatalf("got %+v, want alive when DetailURL is empty", got)
+	}
+}

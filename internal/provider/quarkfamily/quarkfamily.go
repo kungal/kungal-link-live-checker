@@ -21,6 +21,7 @@ type Config struct {
 	Name          string
 	Hosts         []string
 	TokenURL      string
+	DetailURL     string
 	Referer       string
 	Origin        string
 	UserAgent     string
@@ -132,7 +133,81 @@ func (c *Checker) Check(ctx context.Context, u *url.URL, passcode string) checke
 	if err := json.Unmarshal(raw, &tr); err != nil {
 		return checker.Unknown(checker.ReasonUnparseable, "")
 	}
-	return c.mapCode(tr)
+	v := c.mapCode(tr)
+	// A share taken down for violation still answers the token call with code 0
+	// and a valid stoken: the token step only proves the passcode was accepted,
+	// not that anything is left to download. pan.quark.cn/s/2fce2f1d6d91 was
+	// reported alive here while the browser showed "该分享已失效，不可访问".
+	if v.Status == checker.StatusAlive && c.cfg.DetailURL != "" {
+		return c.verifyDetail(ctx, pwdID, tr.Data.Stoken)
+	}
+	return v
+}
+
+type detailResp struct {
+	Code int `json:"code"`
+	Data struct {
+		Share struct {
+			PartialViolation bool `json:"partial_violation"`
+		} `json:"share"`
+	} `json:"data"`
+}
+
+// PartialViolation is deliberately not mapped to Dead. Measured against real
+// shares, it covers both "every file is gone" and "some files are gone, the
+// rest still list and download", and nothing in this response separates the
+// two. Unknown keeps the report gate honest without ever killing a live link.
+func (c *Checker) verifyDetail(ctx context.Context, pwdID, stoken string) checker.Verdict {
+	q := url.Values{
+		"pwd_id":       {pwdID},
+		"stoken":       {stoken},
+		"pdir_fid":     {"0"},
+		"_page":        {"1"},
+		"_size":        {"1"},
+		"_fetch_share": {"1"},
+	}
+	sep := "&"
+	if !strings.Contains(c.cfg.DetailURL, "?") {
+		sep = "?"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.cfg.DetailURL+sep+q.Encode(), nil)
+	if err != nil {
+		return checker.Unknown(checker.ReasonNetworkError, "")
+	}
+	req.Header.Set("User-Agent", c.cfg.UserAgent)
+	if c.cfg.Referer != "" {
+		req.Header.Set("Referer", c.cfg.Referer)
+	}
+	if c.cfg.Origin != "" {
+		req.Header.Set("Origin", c.cfg.Origin)
+	}
+
+	resp, err := c.cfg.Client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
+			return checker.Unknown(checker.ReasonTimeout, "")
+		}
+		return checker.Unknown(checker.ReasonNetworkError, "")
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return checker.Unknown(checker.ReasonNetworkError, "")
+	}
+	var dr detailResp
+	if err := json.Unmarshal(raw, &dr); err != nil {
+		return checker.Unknown(checker.ReasonUnparseable, "")
+	}
+	if dr.Code != 0 {
+		c.cfg.Logger.Warn("share detail returned a non-zero code; treating as unknown",
+			"provider", c.cfg.Name, "code", dr.Code)
+		return checker.Unknown(checker.ReasonUnparseable, strconv.Itoa(dr.Code))
+	}
+	if dr.Data.Share.PartialViolation {
+		return checker.Unknown(checker.ReasonShareBlocked, "0/partial_violation")
+	}
+	return checker.Alive(checker.ReasonShareOK, "0")
 }
 
 func (c *Checker) mapCode(tr tokenResp) checker.Verdict {

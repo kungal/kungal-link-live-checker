@@ -1,6 +1,6 @@
 # 部署:CI/CD(GHCR + GitHub Actions + Dokploy)
 
-> 对齐 `kun-galgame-infra/docs/deploy`(尤其 [13-registry-ci.md](../../kun-galgame-infra/docs/deploy/13-registry-ci.md) 与 [12-dokploy.md](../../kun-galgame-infra/docs/deploy/12-dokploy.md))。**生产机零构建**:CI 在别处把镜像 build 好推 GHCR,Dokploy 只拉镜像。
+> 对齐 `nextmoe-infra/docs/deploy`(尤其 [13-registry-ci.md](../../nextmoe-infra/docs/deploy/13-registry-ci.md) 与 [12-dokploy.md](../../nextmoe-infra/docs/deploy/12-dokploy.md))。**生产机零构建**:CI 在别处把镜像 build 好推 GHCR,Dokploy 只拉镜像。
 
 ## 流水线
 

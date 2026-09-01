@@ -1,5 +1,5 @@
 # Test → build image → push to GHCR → trigger a Dokploy redeploy.
-# Mirrors kun-galgame-infra's build.yml (see that repo's docs/deploy/13-registry-ci.md).
+# Mirrors nextmoe-infra's build.yml (see that repo's docs/deploy/13-registry-ci.md).
 # Single binary, so a single image (no build matrix).
 name: build-and-push
 

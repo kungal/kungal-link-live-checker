@@ -80,7 +80,7 @@
 - **缓存**:`dead` 结果长缓存、`alive` 中等 TTL、`unknown` 极短/不缓存。多消费方共享缓存(论坛查过的链接,补丁站直接命中)。
 - **限流 / 退避**:按 provider 维度的全局限流预算,防止把出口 IP 打进网盘黑名单。
 - **按需为主**:初期只在"被报告时"校验,**不做全量爬取**(全量必被封)。后台低频复检是后话。
-- **部署隔离**:执行抓取的出口 IP **必须**与 OAuth/身份服务的 IP 分开——网盘封 IP 不得波及登录。这也是它不放进 kun-galgame-infra 的根本原因(爬虫不碰信任根)。
+- **部署隔离**:执行抓取的出口 IP **必须**与 OAuth/身份服务的 IP 分开——网盘封 IP 不得波及登录。这也是它不放进 nextmoe-infra 的根本原因(爬虫不碰信任根)。
 
 详见 [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)。各网盘 API 的逆向细节与状态码映射见 [docs/PROVIDERS.md](docs/PROVIDERS.md)。
 
@@ -123,7 +123,7 @@ curl -s -X POST localhost:6734/v1/check \
 
 ## 部署
 
-CI/CD 对齐 `kun-galgame-infra`:push `main` → GitHub Actions 测试 + 构建单二进制镜像推 GHCR(`:latest` + `:<sha>`)→ 触发 Dokploy webhook 拉取重部署。镜像 distroless(~17MB),自带 `healthcheck` 子命令。**出口 IP 须与 OAuth/身份服务隔离**(网盘封 IP 不得波及登录)。详见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
+CI/CD 对齐 `nextmoe-infra`:push `main` → GitHub Actions 测试 + 构建单二进制镜像推 GHCR(`:latest` + `:<sha>`)→ 触发 Dokploy webhook 拉取重部署。镜像 distroless(~17MB),自带 `healthcheck` 子命令。**出口 IP 须与 OAuth/身份服务隔离**(网盘封 IP 不得波及登录)。详见 [`docs/DEPLOY.md`](docs/DEPLOY.md)。
 
 ```bash
 docker compose up --build    # 本地;生产用 docker-compose.prod.yml(GHCR 镜像)

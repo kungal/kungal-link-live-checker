@@ -1,5 +1,5 @@
 # Single static Go binary on distroless. Build context = repo root.
-# Mirrors kun-galgame-infra/docker/go.Dockerfile conventions (CGO off, trimmed,
+# Mirrors nextmoe-infra/docker/go.Dockerfile conventions (CGO off, trimmed,
 # distroless/static:nonroot, `healthcheck` subcommand for HEALTHCHECK).
 ARG GO_VERSION=1.25
 

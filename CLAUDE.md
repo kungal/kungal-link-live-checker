@@ -49,7 +49,7 @@ Once you've read these three, you have all the background. This file only adds "
 ## Current Status
 - **Documentation only, no code yet.** When you take over, the repo is a design skeleton (README + docs + go.mod + .gitignore).
 - Your first task is usually **Phase 0 (skeleton) → Phase 1 (Quark + UC)**; see the README/REQUIREMENTS roadmap.
-- module path: `github.com/KunMoe/kungal-link-live-checker` (Go 1.23). The stack aims for **minimal dependencies, a single binary**; use stdlib `net/http` for HTTP — don't mindlessly pull in a heavy framework.
+- module path: `github.com/KunMoe/kungal-link-live-checker` (Go 1.26.10). The stack aims for **minimal dependencies, a single binary**; use stdlib `net/http` for HTTP — don't mindlessly pull in a heavy framework.
 
 ## The Iron Rule You Must Never Break (the lifeblood of the entire project)
 

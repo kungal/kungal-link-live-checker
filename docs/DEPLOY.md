@@ -15,7 +15,7 @@ push main ─► GitHub Actions(.github/workflows/build.yml)
                   Dokploy ─► 拉 :latest ─► 滚动重部署(docker-compose.prod.yml)
 ```
 
-- **镜像**:`Dockerfile` 多阶段——`golang:1.25` 静态编译(`CGO_ENABLED=0`)→ `distroless/static-debian13:nonroot`(~2MB、无 shell、nonroot,自带 ca-certificates 供出网 HTTPS)。**零外部依赖**,故无 `go.sum`。
+- **镜像**:`Dockerfile` 多阶段——`golang:1.26.10` 静态编译(`CGO_ENABLED=0`)→ `distroless/static-debian13:nonroot`(~2MB、无 shell、nonroot,自带 ca-certificates 供出网 HTTPS)。**零外部依赖**,故无 `go.sum`。
 - **两个 tag**:`:latest`(Dokploy 监听)+ `:<git-sha>`(不可变,回滚锚点)。回滚 = Dokploy 镜像引用临时改成某个已知良好的 `:<git-sha>` 再 redeploy。
 - **健康检查**:distroless 无 curl,二进制自带 `healthcheck` 子命令(`/app healthcheck` 探自身 `/healthz`,据 `LLC_ADDR` 取端口)。
 

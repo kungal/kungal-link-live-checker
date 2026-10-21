@@ -1,7 +1,7 @@
 # Single static Go binary on distroless. Build context = repo root.
 # Mirrors nextmoe-infra/docker/go.Dockerfile conventions (CGO off, trimmed,
 # distroless/static:nonroot, `healthcheck` subcommand for HEALTHCHECK).
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26.10
 
 # ---- build ----
 FROM golang:${GO_VERSION}-trixie AS build
